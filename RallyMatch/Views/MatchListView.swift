@@ -11,7 +11,7 @@ struct MatchListView: View {
     private var roundGroups: [(round: Int, matches: [GeneratedMatch])] {
         MatchRoundHelper.groups(
             from: sessionStore.matches,
-            courtCount: sessionStore.courtCount
+            playerIds: sessionStore.players.map(\.id)
         )
     }
 

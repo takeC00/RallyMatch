@@ -21,8 +21,31 @@ function showError(message) {
   emptyEl.classList.add("hidden");
 }
 
-function roundNumber(matchNo, courtCount) {
-  return Math.floor((matchNo - 1) / Math.max(1, courtCount)) + 1;
+/** 1巡 = 全員が最低1回出場し終わるまで */
+function assignRounds(matches, playerIds) {
+  const visible = [...matches]
+    .filter((m) => m.status !== "cancelled")
+    .sort((a, b) => a.matchNo - b.matchNo);
+
+  const participants = new Set(playerIds);
+  const counts = new Map(playerIds.map((id) => [id, 0]));
+  let currentRound = 1;
+  const roundOf = new Map();
+
+  for (const match of visible) {
+    roundOf.set(match.id, currentRound);
+
+    for (const id of [...match.team1, ...match.team2]) {
+      if (participants.has(id)) {
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+    }
+
+    const allDone = playerIds.every((id) => (counts.get(id) ?? 0) >= currentRound);
+    if (allDone) currentRound += 1;
+  }
+
+  return roundOf;
 }
 
 function createTeamElement(ids, playerMap) {
@@ -53,10 +76,13 @@ function createTeamElement(ids, playerMap) {
   return team;
 }
 
-function renderMatches(matches, playerMap, courtCount) {
+function renderMatches(matches, playerMap) {
   matchesEl.innerHTML = "";
 
-  const visible = matches.filter((m) => m.status !== "cancelled");
+  const visible = matches
+    .filter((m) => m.status !== "cancelled")
+    .sort((a, b) => a.matchNo - b.matchNo);
+
   if (visible.length === 0) {
     emptyEl.classList.remove("hidden");
     return;
@@ -64,10 +90,13 @@ function renderMatches(matches, playerMap, courtCount) {
 
   emptyEl.classList.add("hidden");
 
+  const playerIds = [...playerMap.keys()];
+  const roundOf = assignRounds(visible, playerIds);
+
   let currentRound = null;
 
   for (const match of visible) {
-    const round = roundNumber(match.matchNo, courtCount);
+    const round = roundOf.get(match.id) ?? 1;
     if (round !== currentRound) {
       if (currentRound !== null) {
         const divider = document.createElement("hr");
@@ -158,9 +187,6 @@ async function start() {
 
   statusEl.textContent = "リアルタイム更新中";
 
-  const sessionData = sessionSnap.data();
-  let courtCount = sessionData.courtCount ?? 2;
-
   const playerMap = new Map();
   let latestMatches = [];
 
@@ -176,7 +202,7 @@ async function start() {
           level: data.level || "beginner",
         });
       });
-      renderMatches(latestMatches, playerMap, courtCount);
+      renderMatches(latestMatches, playerMap);
     },
     (err) => {
       console.error(err);
@@ -201,20 +227,13 @@ async function start() {
           status: data.status ?? "scheduled",
         };
       });
-      renderMatches(latestMatches, playerMap, courtCount);
+      renderMatches(latestMatches, playerMap);
     },
     (err) => {
       console.error(err);
       showError(firestoreErrorMessage(err, "試合情報"));
     }
   );
-
-  onSnapshot(sessionRef, (snap) => {
-    if (snap.exists()) {
-      courtCount = snap.data().courtCount ?? courtCount;
-      renderMatches(latestMatches, playerMap, courtCount);
-    }
-  });
 }
 
 start();
