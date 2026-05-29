@@ -9,8 +9,8 @@ struct SessionSetupView: View {
     @Query private var allPlayers: [Player]
     @Bindable private var firebase = FirebaseManager.shared
     @State private var selectedIds: Set<UUID> = []
+    @Environment(\.dismiss) private var dismiss
     @State private var showAddPlayer = false
-    @State private var navigateToMatches = false
     @State private var isGenerating = false
 
     private var circlePlayers: [Player] {
@@ -84,9 +84,6 @@ struct SessionSetupView: View {
             }
         }
         .navigationTitle("試合設定")
-        .navigationDestination(isPresented: $navigateToMatches) {
-            MatchListView(sessionStore: sessionStore)
-        }
         .sheet(isPresented: $showAddPlayer) {
             NavigationStack {
                 PlayerFormView(circle: circle, player: nil)
@@ -137,7 +134,7 @@ struct SessionSetupView: View {
         do {
             try await sessionStore.syncCreate(ownerUid: uid)
             sessionStore.errorMessage = nil
-            navigateToMatches = true
+            dismiss()
         } catch {
             sessionStore.errorMessage = error.localizedDescription
         }

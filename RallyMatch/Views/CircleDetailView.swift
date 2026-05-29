@@ -3,7 +3,6 @@ import SwiftData
 
 struct CircleDetailView: View {
     @Bindable var circle: Circle
-    @Bindable var sessionStore: SessionStore
 
     @Environment(\.modelContext) private var modelContext
     @Query private var allPlayers: [Player]
@@ -33,19 +32,6 @@ struct CircleDetailView: View {
                         }
                     }
                     .onDelete(perform: deletePlayers)
-                }
-            }
-
-            Section {
-                NavigationLink {
-                    SessionSetupView(circle: circle, sessionStore: sessionStore)
-                } label: {
-                    Label("今日の試合", systemImage: "sportscourt")
-                }
-                .disabled(players.count < 4)
-            } footer: {
-                if players.count < 4 {
-                    Text("試合生成には4名以上必要です")
                 }
             }
         }
