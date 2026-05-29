@@ -60,10 +60,13 @@ struct MatchListView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("新規") {
+                Button {
                     onRequestNewSession()
+                } label: {
+                    Image(systemName: "doc.badge.plus")
                 }
                 .disabled(isEndingSession)
+                .accessibilityLabel("新規")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -75,13 +78,12 @@ struct MatchListView: View {
                 .accessibilityLabel("QRコード")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button("遅刻 / 早退") { showAttendanceAdjust = true }
-                    Button("再生成") { regenerate() }
-                    Button("クラウドに同期") { syncAll() }
+                Button {
+                    showAttendanceAdjust = true
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(systemName: "person.badge.clock")
                 }
+                .accessibilityLabel("遅刻 / 早退")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -145,33 +147,10 @@ struct MatchListView: View {
         }
     }
 
-    private func regenerate() {
-        sessionStore.regenerateScheduled()
-        Task {
-            do {
-                try await sessionStore.syncMatches()
-                sessionStore.clearSyncError()
-            } catch {
-                sessionStore.reportSyncError(error)
-            }
-        }
-    }
-
     private func markMatchDone(_ match: GeneratedMatch) {
         Task {
             do {
                 try await sessionStore.syncMarkMatchDone(match.id)
-                sessionStore.clearSyncError()
-            } catch {
-                sessionStore.reportSyncError(error)
-            }
-        }
-    }
-
-    private func syncAll() {
-        Task {
-            do {
-                try await sessionStore.syncAllMatches()
                 sessionStore.clearSyncError()
             } catch {
                 sessionStore.reportSyncError(error)
