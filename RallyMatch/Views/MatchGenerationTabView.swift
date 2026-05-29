@@ -11,6 +11,8 @@ struct MatchGenerationTabView: View {
     }
 
     var body: some View {
+        @Bindable var store = sessionStore
+
         NavigationStack {
             Group {
                 if hasActiveSession {
@@ -54,6 +56,18 @@ struct MatchGenerationTabView: View {
                             sessionStore.reset()
                         }
                     }
+                }
+            }
+            .sheet(isPresented: $store.showParticipationSummary) {
+                NavigationStack {
+                    PlayerParticipationView(sessionStore: sessionStore)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("閉じる") {
+                                    store.showParticipationSummary = false
+                                }
+                            }
+                        }
                 }
             }
         }

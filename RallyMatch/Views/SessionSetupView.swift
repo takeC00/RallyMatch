@@ -134,6 +134,7 @@ struct SessionSetupView: View {
         do {
             try await sessionStore.syncCreate(ownerUid: uid)
             sessionStore.errorMessage = nil
+            sessionStore.showParticipationSummary = true
             dismiss()
         } catch {
             sessionStore.errorMessage = error.localizedDescription

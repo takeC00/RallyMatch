@@ -13,6 +13,11 @@ final class SessionStore {
     var matchPerPlayer: Int = 3
     var isSyncing = false
     var errorMessage: String?
+    var showParticipationSummary = false
+
+    var participationRows: [PlayerParticipation] {
+        ParticipationStats.counts(players: players, matches: matches)
+    }
 
     var scheduledMatches: [GeneratedMatch] {
         matches.filter { $0.status == .scheduled }.sorted { $0.matchNo < $1.matchNo }
@@ -28,6 +33,7 @@ final class SessionStore {
         players = []
         matches = []
         errorMessage = nil
+        showParticipationSummary = false
     }
 
     func generateMatches() {

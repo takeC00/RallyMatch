@@ -34,6 +34,11 @@ struct MatchListView: View {
         .navigationTitle("試合一覧")
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
+                NavigationLink {
+                    PlayerParticipationView(sessionStore: sessionStore)
+                } label: {
+                    Label("出場回数", systemImage: "person.3.sequence")
+                }
                 Button("QR") { showQR = true }
                 Menu {
                     Button("参加者を追加") { showAddPlayers = true }
