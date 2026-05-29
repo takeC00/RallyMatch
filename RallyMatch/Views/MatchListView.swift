@@ -8,9 +8,9 @@ struct MatchListView: View {
     @State private var showQR = false
     @State private var showAddPlayers = false
 
-    private var roundGroups: [(round: Int, matches: [GeneratedMatch])] {
+    private var scheduledRoundGroups: [(round: Int, matches: [GeneratedMatch])] {
         MatchRoundHelper.groups(
-            from: sessionStore.matches,
+            from: sessionStore.scheduledMatches,
             playerIds: sessionStore.players.map(\.id)
         )
     }
@@ -21,7 +21,15 @@ struct MatchListView: View {
                 Text(err).foregroundStyle(.red)
             }
 
-            ForEach(roundGroups, id: \.round) { group in
+            if !sessionStore.doneMatches.isEmpty {
+                Section("試合済") {
+                    ForEach(sessionStore.doneMatches) { match in
+                        MatchRowView(match: match, sessionStore: sessionStore) { _ in }
+                    }
+                }
+            }
+
+            ForEach(scheduledRoundGroups, id: \.round) { group in
                 Section {
                     ForEach(group.matches) { match in
                         matchRow(for: match)
@@ -84,30 +92,17 @@ struct MatchListView: View {
 
     @ViewBuilder
     private func matchRow(for match: GeneratedMatch) -> some View {
-        let row = MatchRowView(match: match, sessionStore: sessionStore) { playerId in
+        MatchRowView(match: match, sessionStore: sessionStore) { playerId in
             editingMatch = match
             editingPlayerId = playerId
         }
-
-        if match.status == .scheduled {
-            row
-                .swipeActions(edge: .leading) {
-                    Button {
-                        markDoneUpTo(match)
-                    } label: {
-                        Label("実施済み", systemImage: "checkmark.circle")
-                    }
-                    .tint(.green)
-                }
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        deleteMatch(match)
-                    } label: {
-                        Label("削除", systemImage: "trash")
-                    }
-                }
-        } else {
-            row
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button {
+                markMatchDone(match)
+            } label: {
+                Label("試合済", systemImage: "checkmark.circle")
+            }
+            .tint(.green)
         }
     }
 
@@ -118,18 +113,9 @@ struct MatchListView: View {
         }
     }
 
-    private func deleteMatch(_ match: GeneratedMatch) {
-        sessionStore.deleteMatch(match.id)
+    private func markMatchDone(_ match: GeneratedMatch) {
         Task {
-            if let sessionId = sessionStore.sessionId {
-                try? await SessionSyncService.shared.deleteMatch(match.id, sessionId: sessionId)
-            }
-        }
-    }
-
-    private func markDoneUpTo(_ match: GeneratedMatch) {
-        Task {
-            try? await sessionStore.syncMarkDone(upTo: match.matchNo)
+            try? await sessionStore.syncMarkMatchDone(match.id)
         }
     }
 

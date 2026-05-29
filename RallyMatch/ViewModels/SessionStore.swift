@@ -62,6 +62,11 @@ final class SessionStore {
         }
     }
 
+    func markMatchDone(_ matchId: UUID) {
+        guard let idx = matches.firstIndex(where: { $0.id == matchId }) else { return }
+        matches[idx].status = .done
+    }
+
     func swapPlayer(matchId: UUID, from playerId: UUID, to newPlayerId: UUID) {
         guard let idx = matches.firstIndex(where: { $0.id == matchId }) else { return }
         var m = matches[idx]
@@ -173,6 +178,13 @@ final class SessionStore {
 
     func syncSingleMatch(_ match: GeneratedMatch) async throws {
         guard let sessionId else { return }
+        try await SessionSyncService.shared.updateMatch(match, sessionId: sessionId)
+    }
+
+    func syncMarkMatchDone(_ matchId: UUID) async throws {
+        guard let sessionId else { return }
+        markMatchDone(matchId)
+        guard let match = matches.first(where: { $0.id == matchId }) else { return }
         try await SessionSyncService.shared.updateMatch(match, sessionId: sessionId)
     }
 
