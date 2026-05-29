@@ -1,0 +1,64 @@
+import SwiftUI
+
+struct SettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable private var firebase = FirebaseManager.shared
+    @State private var hostingURL = AppConfig.hostingBaseURL
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Label(
+                        firebase.isPlistConfigured ? "設定済み" : "未設定",
+                        systemImage: firebase.isPlistConfigured ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                    )
+                    .foregroundStyle(firebase.isPlistConfigured ? .green : .orange)
+
+                    if !firebase.isPlistConfigured {
+                        Text("Firebase Console から GoogleService-Info.plist をダウンロードし、RallyMatch/ フォルダに配置してから再ビルドしてください。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if !firebase.isReady {
+                        Button("Firebase に再接続") {
+                            Task { await firebase.signInAnonymouslyIfNeeded() }
+                        }
+                    }
+
+                    if let err = firebase.lastError {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                } header: {
+                    Text("Firebase")
+                }
+
+                Section {
+                    TextField("https://your-project.web.app", text: $hostingURL)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                } header: {
+                    Text("参加者用 URL（Firebase Hosting）")
+                } footer: {
+                    Text("QRコードは {URL}/session/{sessionId} 形式で生成されます")
+                }
+            }
+            .navigationTitle("設定")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        AppConfig.hostingBaseURL = hostingURL
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+            .onAppear {
+                hostingURL = AppConfig.hostingBaseURL
+            }
+        }
+    }
+}

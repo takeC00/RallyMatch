@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSessionOwner(sessionId) {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/sessions/$(sessionId)).data.ownerUid == request.auth.uid;
+    }
+
+    match /sessions/{sessionId} {
+      // Participants: read-only (no login required)
+      allow get: if true;
+      allow list: if false;
+
+      // Organizer: only the authenticated owner can write
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isSessionOwner(sessionId);
+
+      match /matches/{matchId} {
+        allow get, list: if true;
+        allow create, update, delete: if isSessionOwner(sessionId);
+      }
+
+      match /sessionPlayers/{playerId} {
+        allow get, list: if true;
+        allow create, update, delete: if isSessionOwner(sessionId);
+      }
+    }
+  }
+}
+

@@ -1,0 +1,108 @@
+:root {
+  color-scheme: light;
+  --bg: #f0fdfa;
+  --surface: #ffffff;
+  --text: #134e4a;
+  --muted: #5eead4;
+  --accent: #0f766e;
+  --border: #99f6e4;
+  --error: #b91c1c;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: linear-gradient(180deg, var(--bg), #ecfeff 40%);
+  color: var(--text);
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 1rem 1.25rem 0.75rem;
+  background: rgba(240, 253, 250, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.status {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.matches {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1rem 2rem;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.match-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 6px 20px rgba(15, 118, 110, 0.08);
+}
+
+.match-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.court {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.teams {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.team {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.vs {
+  margin: 0;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.empty,
+.error {
+  text-align: center;
+  padding: 2rem 1rem;
+  font-size: 0.95rem;
+}
+
+.error {
+  color: var(--error);
+}
+
+.hidden {
+  display: none;
+}

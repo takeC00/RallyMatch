@@ -2,16 +2,16 @@
 //  RallyMatchApp.swift
 //  RallyMatch
 //
-//  Created by 服部剛士 on 2026/05/28.
-//
 
 import SwiftUI
+import SwiftData
 
 @main
 struct RallyMatchApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
         }
+        .modelContainer(for: [Circle.self, Player.self])
     }
 }
