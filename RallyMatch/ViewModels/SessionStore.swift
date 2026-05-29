@@ -169,9 +169,67 @@ final class SessionStore {
         }
     }
 
-    func markMatchDone(_ matchId: UUID) {
-        guard let idx = matches.firstIndex(where: { $0.id == matchId }) else { return }
+    func markMatchDone(_ matchId: UUID) -> [UUID] {
+        guard let idx = matches.firstIndex(where: { $0.id == matchId }) else { return [] }
+        let releasedNo = matches[idx].matchNo
+        let wasInProgress = inProgressMatchIds.contains(matchId)
         matches[idx].status = .done
+        matches[idx].progressOverride = nil
+        var modified = [matchId]
+        if wasInProgress {
+            modified.append(contentsOf: clearDeferredOut(beforeMatchNo: releasedNo))
+        }
+        return modified
+    }
+
+    /// コートバッジのタップで試合中 ON/OFF（最大コート数・入れ替え）。変更した試合 ID を返す。
+    @discardableResult
+    func toggleMatchInProgress(_ matchId: UUID) -> [UUID] {
+        guard let idx = matches.firstIndex(where: { $0.id == matchId }),
+              matches[idx].status == .scheduled else { return [] }
+
+        let n = max(1, courtCount)
+        let scheduled = scheduledMatches
+        let currentIds = MatchProgressHelper.inProgressMatchIds(
+            scheduled: scheduled,
+            courtCount: n
+        )
+
+        if currentIds.contains(matchId) {
+            let releasedNo = matches[idx].matchNo
+            matches[idx].progressOverride = .forcedOut
+            var modified = [matchId]
+            modified.append(contentsOf: clearDeferredOut(beforeMatchNo: releasedNo))
+            return modified
+        }
+
+        var modified: [UUID] = []
+        if currentIds.count >= n {
+            let inProgOrdered = scheduled
+                .filter { currentIds.contains($0.id) }
+                .sorted { $0.matchNo < $1.matchNo }
+            if let lowest = inProgOrdered.first,
+               let lowIdx = matches.firstIndex(where: { $0.id == lowest.id }) {
+                matches[lowIdx].progressOverride = .deferredOut
+                modified.append(lowest.id)
+            }
+        }
+        matches[idx].progressOverride = .forcedIn
+        modified.append(matchId)
+        return modified
+    }
+
+    /// 先送りした試合の一時除外を解除し、自動キューに戻す
+    @discardableResult
+    private func clearDeferredOut(beforeMatchNo: Int) -> [UUID] {
+        var modified: [UUID] = []
+        for i in matches.indices where matches[i].status == .scheduled
+            && matches[i].progressOverride == .deferredOut
+            && matches[i].matchNo < beforeMatchNo {
+            matches[i].progressOverride = nil
+            modified.append(matches[i].id)
+        }
+        return modified
     }
 
     func swapPlayer(matchId: UUID, from playerId: UUID, to newPlayerId: UUID) {
@@ -305,9 +363,11 @@ final class SessionStore {
 
     func syncMarkMatchDone(_ matchId: UUID) async throws {
         guard let sessionId else { return }
-        markMatchDone(matchId)
-        guard let match = matches.first(where: { $0.id == matchId }) else { return }
-        try await SessionSyncService.shared.updateMatch(match, sessionId: sessionId)
+        let modifiedIds = markMatchDone(matchId)
+        for id in modifiedIds {
+            guard let match = matches.first(where: { $0.id == id }) else { continue }
+            try await SessionSyncService.shared.updateMatch(match, sessionId: sessionId)
+        }
     }
 
     func syncMarkDone(upTo matchNo: Int) async throws {

@@ -8,6 +8,8 @@ struct GeneratedMatch: Identifiable, Hashable {
     var team1: [UUID]
     var team2: [UUID]
     var status: MatchStatus
+    /// 試合中スロットの手動指定（nil＝自動）
+    var progressOverride: MatchProgressOverride?
 
     var playerIds: [UUID] { team1 + team2 }
 
@@ -18,7 +20,8 @@ struct GeneratedMatch: Identifiable, Hashable {
         roundNo: Int = 1,
         team1: [UUID],
         team2: [UUID],
-        status: MatchStatus = .scheduled
+        status: MatchStatus = .scheduled,
+        progressOverride: MatchProgressOverride? = nil
     ) {
         self.id = id
         self.matchNo = matchNo
@@ -27,5 +30,6 @@ struct GeneratedMatch: Identifiable, Hashable {
         self.team1 = team1
         self.team2 = team2
         self.status = status
+        self.progressOverride = progressOverride
     }
 }

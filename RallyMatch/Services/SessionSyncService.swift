@@ -128,17 +128,7 @@ final class SessionSyncService {
         let now = Timestamp(date: .now)
         for m in matches where !onlyScheduled || m.status == .scheduled {
             let ref = col.document(m.id.uuidString)
-            batch.setData([
-                "matchNo": m.matchNo,
-                "courtNo": m.courtNo,
-                "roundNo": m.roundNo,
-                "team1": m.team1.map(\.uuidString),
-                "team2": m.team2.map(\.uuidString),
-                "playerIds": m.playerIds.map(\.uuidString),
-                "status": m.status.rawValue,
-                "createdAt": now,
-                "updatedAt": now,
-            ], forDocument: ref)
+            batch.setData(matchPayload(m, now: now), forDocument: ref)
         }
         try await batch.commit()
 
@@ -150,16 +140,12 @@ final class SessionSyncService {
     func updateMatch(_ match: GeneratedMatch, sessionId: String) async throws {
         let ref = db.collection("sessions").document(sessionId)
             .collection("matches").document(match.id.uuidString)
-        try await ref.updateData([
-            "matchNo": match.matchNo,
-            "courtNo": match.courtNo,
-            "roundNo": match.roundNo,
-            "team1": match.team1.map(\.uuidString),
-            "team2": match.team2.map(\.uuidString),
-            "playerIds": match.playerIds.map(\.uuidString),
-            "status": match.status.rawValue,
-            "updatedAt": Timestamp(date: .now),
-        ])
+        var data = matchPayload(match, now: Timestamp(date: .now), includeCreatedAt: false)
+        data.removeValue(forKey: "createdAt")
+        if match.progressOverride == nil {
+            data["progressOverride"] = FieldValue.delete()
+        }
+        try await ref.updateData(data)
     }
 
     func deleteMatch(_ matchId: UUID, sessionId: String) async throws {
@@ -200,5 +186,29 @@ final class SessionSyncService {
             ], forDocument: ref)
         }
         try await batch.commit()
+    }
+
+    private func matchPayload(
+        _ m: GeneratedMatch,
+        now: Timestamp,
+        includeCreatedAt: Bool = true
+    ) -> [String: Any] {
+        var data: [String: Any] = [
+            "matchNo": m.matchNo,
+            "courtNo": m.courtNo,
+            "roundNo": m.roundNo,
+            "team1": m.team1.map(\.uuidString),
+            "team2": m.team2.map(\.uuidString),
+            "playerIds": m.playerIds.map(\.uuidString),
+            "status": m.status.rawValue,
+            "updatedAt": now,
+        ]
+        if includeCreatedAt {
+            data["createdAt"] = now
+        }
+        if let override = m.progressOverride {
+            data["progressOverride"] = override.rawValue
+        }
+        return data
     }
 }

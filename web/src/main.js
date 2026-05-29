@@ -80,13 +80,35 @@ function createTeamElement(ids, playerMap) {
 
 function inProgressMatchIds(scheduled, courtCount) {
   const n = Math.max(1, courtCount ?? 1);
-  return new Set(
-    scheduled
-      .filter((m) => m.status === "scheduled")
-      .sort((a, b) => a.matchNo - b.matchNo)
-      .slice(0, n)
+  const ordered = scheduled
+    .filter((m) => m.status === "scheduled")
+    .sort((a, b) => a.matchNo - b.matchNo);
+
+  let forcedIn = ordered.filter((m) => m.progressOverride === "in");
+  const excludedFromAutoIds = new Set(
+    ordered
+      .filter((m) => m.progressOverride === "out" || m.progressOverride === "deferred")
       .map((m) => m.id)
   );
+
+  while (forcedIn.length > n) {
+    forcedIn.shift();
+  }
+
+  const result = [...forcedIn];
+  const resultIds = new Set(result.map((m) => m.id));
+
+  if (result.length < n) {
+    for (const match of ordered) {
+      if (result.length >= n) break;
+      if (excludedFromAutoIds.has(match.id)) continue;
+      if (resultIds.has(match.id)) continue;
+      result.push(match);
+      resultIds.add(match.id);
+    }
+  }
+
+  return new Set(result.slice(0, n).map((m) => m.id));
 }
 
 function createMatchCard(match, playerMap, inProgressIds) {
@@ -303,6 +325,7 @@ async function start() {
           team1: data.team1 ?? [],
           team2: data.team2 ?? [],
           status: data.status ?? "scheduled",
+          progressOverride: data.progressOverride ?? null,
         };
       });
       renderMatches(latestMatches, playerMap, courtCount);

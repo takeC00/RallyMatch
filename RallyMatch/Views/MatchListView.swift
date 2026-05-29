@@ -59,16 +59,7 @@ struct MatchListView: View {
             sessionStore.ensureRoundNumbers()
         }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    onRequestNewSession()
-                } label: {
-                    Image(systemName: "doc.badge.plus")
-                }
-                .disabled(isEndingSession)
-                .accessibilityLabel("新規")
-            }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
                     showQR = true
                 } label: {
@@ -76,16 +67,22 @@ struct MatchListView: View {
                 }
                 .disabled(sessionStore.sessionId == nil)
                 .accessibilityLabel("QRコード")
-            }
-            ToolbarItem(placement: .topBarTrailing) {
+
+                Button {
+                    onRequestNewSession()
+                } label: {
+                    Image(systemName: "doc.badge.plus")
+                }
+                .disabled(isEndingSession)
+                .accessibilityLabel("新規")
+
                 Button {
                     showAttendanceAdjust = true
                 } label: {
                     Image(systemName: "person.badge.clock")
                 }
                 .accessibilityLabel("遅刻 / 早退")
-            }
-            ToolbarItem(placement: .topBarTrailing) {
+
                 Button {
                     showMatchListHelp = true
                 } label: {
@@ -133,10 +130,15 @@ struct MatchListView: View {
 
     @ViewBuilder
     private func matchRow(for match: GeneratedMatch) -> some View {
-        MatchRowView(match: match, sessionStore: sessionStore) { playerId in
-            editingMatch = match
-            editingPlayerId = playerId
-        }
+        MatchRowView(
+            match: match,
+            sessionStore: sessionStore,
+            onTapPlayer: { playerId in
+                editingMatch = match
+                editingPlayerId = playerId
+            },
+            onTapProgress: { toggleProgress(match) }
+        )
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button {
                 markMatchDone(match)
@@ -151,6 +153,22 @@ struct MatchListView: View {
         Task {
             do {
                 try await sessionStore.syncMarkMatchDone(match.id)
+                sessionStore.clearSyncError()
+            } catch {
+                sessionStore.reportSyncError(error)
+            }
+        }
+    }
+
+    private func toggleProgress(_ match: GeneratedMatch) {
+        Task {
+            let modifiedIds = sessionStore.toggleMatchInProgress(match.id)
+            guard !modifiedIds.isEmpty else { return }
+            do {
+                for id in modifiedIds {
+                    guard let updated = sessionStore.matches.first(where: { $0.id == id }) else { continue }
+                    try await sessionStore.syncSingleMatch(updated)
+                }
                 sessionStore.clearSyncError()
             } catch {
                 sessionStore.reportSyncError(error)
@@ -182,7 +200,11 @@ struct MatchRowView: View {
     let match: GeneratedMatch
     @Bindable var sessionStore: SessionStore
     let onTapPlayer: (UUID) -> Void
+    var onTapProgress: (() -> Void)? = nil
 
+    private var isInProgress: Bool {
+        sessionStore.inProgressMatchIds.contains(match.id)
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -241,7 +263,32 @@ struct MatchRowView: View {
                 .padding(.vertical, 2)
                 .background(Color.gray.opacity(0.2))
                 .clipShape(Capsule())
-        } else if sessionStore.inProgressMatchIds.contains(match.id) {
+        } else if match.status == .scheduled, let onTapProgress {
+            Button(action: onTapProgress) {
+                if isInProgress {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sportscourt.fill")
+                        Text("試合中")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.15))
+                    .clipShape(Capsule())
+                } else {
+                    Text("\(match.courtNo)コート")
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color.teal.opacity(0.15))
+                        .foregroundStyle(Color.teal)
+                        .clipShape(Capsule())
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isInProgress ? "試合中。タップで待ちに戻す" : "\(match.courtNo)コート。タップで試合中にする")
+        } else if isInProgress {
             HStack(spacing: 4) {
                 Image(systemName: "sportscourt.fill")
                 Text("試合中")
@@ -504,7 +551,7 @@ struct PlayerNextMatchWaitView: View {
             } header: {
                 Text("次の試合まで")
             } footer: {
-                Text("先頭のコート数ぶんが試合中です。それ以外は「次の試合まで 1、2、3…」と表示します。")
+                Text("コート数ぶんまで試合中です（バッジタップで変更可）。それ以外は「次の試合まで 1、2、3…」と表示します。")
             }
         }
         .navigationTitle("次の試合まで")
