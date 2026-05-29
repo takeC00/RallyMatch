@@ -6,9 +6,14 @@ struct MatchListView: View {
     @State private var editingMatch: GeneratedMatch?
     @State private var editingPlayerId: UUID?
     @State private var showQR = false
-    @State private var doneUpToText = ""
-    @State private var showDoneSheet = false
     @State private var showAddPlayers = false
+
+    private var roundGroups: [(round: Int, matches: [GeneratedMatch])] {
+        MatchRoundHelper.groups(
+            from: sessionStore.matches,
+            courtCount: sessionStore.courtCount
+        )
+    }
 
     var body: some View {
         List {
@@ -16,40 +21,23 @@ struct MatchListView: View {
                 Text(err).foregroundStyle(.red)
             }
 
-            if !sessionStore.doneMatches.isEmpty {
-                Section("実施済み") {
-                    ForEach(sessionStore.doneMatches) { match in
-                        MatchRowView(match: match, sessionStore: sessionStore) { _ in }
+            ForEach(roundGroups, id: \.round) { group in
+                Section {
+                    ForEach(group.matches) { match in
+                        matchRow(for: match)
                     }
+                } header: {
+                    RoundSectionHeader(round: group.round)
                 }
-            }
-
-            Section("予定") {
-                ForEach(sessionStore.scheduledMatches) { match in
-                    MatchRowView(match: match, sessionStore: sessionStore) { playerId in
-                        editingMatch = match
-                        editingPlayerId = playerId
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            deleteMatch(match)
-                        } label: {
-                            Label("削除", systemImage: "trash")
-                        }
-                    }
-                }
-                .onMove(perform: moveMatches)
             }
         }
         .navigationTitle("試合一覧")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) { EditButton() }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button("QR") { showQR = true }
                 Menu {
                     Button("参加者を追加") { showAddPlayers = true }
                     Button("未実施のみ再生成") { regenerate() }
-                    Button("実施済みを確定…") { showDoneSheet = true }
                     Button("クラウドに同期") { syncAll() }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -79,14 +67,6 @@ struct MatchListView: View {
         .sheet(isPresented: $showAddPlayers) {
             AddSessionPlayersSheet(sessionStore: sessionStore)
         }
-        .alert("実施済み試合番号", isPresented: $showDoneSheet) {
-            TextField("例: 5", text: $doneUpToText)
-                .keyboardType(.numberPad)
-            Button("確定") { markDone() }
-            Button("キャンセル", role: .cancel) {}
-        } message: {
-            Text("第N試合までを実施済みにします")
-        }
         .overlay {
             if sessionStore.isSyncing {
                 ProgressView("同期中…")
@@ -97,9 +77,40 @@ struct MatchListView: View {
         }
     }
 
-    private func moveMatches(from source: IndexSet, to destination: Int) {
-        sessionStore.moveMatch(from: source, to: destination)
-        syncAll()
+    @ViewBuilder
+    private func matchRow(for match: GeneratedMatch) -> some View {
+        let row = MatchRowView(match: match, sessionStore: sessionStore) { playerId in
+            editingMatch = match
+            editingPlayerId = playerId
+        }
+
+        if match.status == .scheduled {
+            row
+                .swipeActions(edge: .leading) {
+                    Button {
+                        markDoneUpTo(match)
+                    } label: {
+                        Label("実施済み", systemImage: "checkmark.circle")
+                    }
+                    .tint(.green)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        deleteMatch(match)
+                    } label: {
+                        Label("削除", systemImage: "trash")
+                    }
+                }
+        } else {
+            row
+        }
+    }
+
+    private func regenerate() {
+        sessionStore.regenerateScheduled()
+        Task {
+            try? await sessionStore.syncMatches()
+        }
     }
 
     private func deleteMatch(_ match: GeneratedMatch) {
@@ -111,17 +122,9 @@ struct MatchListView: View {
         }
     }
 
-    private func regenerate() {
-        sessionStore.regenerateScheduled()
+    private func markDoneUpTo(_ match: GeneratedMatch) {
         Task {
-            try? await sessionStore.syncMatches()
-        }
-    }
-
-    private func markDone() {
-        guard let n = Int(doneUpToText) else { return }
-        Task {
-            try? await sessionStore.syncMarkDone(upTo: n)
+            try? await sessionStore.syncMarkDone(upTo: match.matchNo)
         }
     }
 
@@ -129,6 +132,25 @@ struct MatchListView: View {
         Task {
             try? await sessionStore.syncAllMatches()
         }
+    }
+}
+
+private struct RoundSectionHeader: View {
+    let round: Int
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if round > 1 {
+                Divider()
+                    .padding(.bottom, 6)
+            }
+            Text("\(round)巡目")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .textCase(nil)
+        .listRowInsets(EdgeInsets())
     }
 }
 
