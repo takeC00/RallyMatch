@@ -4,68 +4,77 @@ struct MatchListHelpView: View {
     var body: some View {
         List {
             Section {
-                Text("試合一覧画面の操作を説明します。試合済の更新や入れ替え・遅刻早退の変更は、都度クラウドへ自動同期されます。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                helpText("試合一覧画面の操作を説明します。試合済の更新や入れ替え・遅刻早退の変更は、都度クラウドへ自動同期されます。")
             }
 
             Section("画面上部のアイコン（左から）") {
-                Label("QRコード … 参加者用 QR を表示", systemImage: "qrcode")
-                Label("新規 … いまの試合を破棄して作り直す", systemImage: "doc.badge.plus")
-                Label("遅刻 / 早退 … 参加・退場の ON / OFF", systemImage: "person.badge.clock")
-                Label("操作の説明 … このページを開く（オレンジ）", systemImage: "questionmark.circle")
+                helpLabel("QRコード … 参加者用 QR を表示", systemImage: "qrcode")
+                helpLabel("新規 … いまの試合を破棄して作り直す", systemImage: "doc.badge.plus")
+                helpLabel("遅刻 / 早退 … 参加・退場の ON / OFF", systemImage: "person.badge.clock")
+                helpLabel("操作の説明 … このページを開く（オレンジ）", systemImage: "questionmark.circle")
             }
-            .font(.subheadline)
 
             Section("新規") {
-                Text("書類＋マークのアイコンをタップすると確認ダイアログが出ます。「破棄して新規作成」で、いまの試合を捨てて最初から作り直します。クラウド上のデータと参加者用 QR も無効になり、元に戻せません。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                helpText("書類＋マークのアイコンをタップすると確認ダイアログが出ます。「破棄して新規作成」で、いまの試合を捨てて最初から作り直します。クラウド上のデータと参加者用 QR も無効になり、元に戻せません。")
             }
 
             Section("QRコード") {
-                Text("QR アイコンから、参加者がスマホブラウザで試合一覧を見るための QR を表示します。URL は表示せず、QR の読み取りのみ想定しています。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                helpText("QR アイコンから、参加者がスマホブラウザで試合一覧を見るための QR を表示します。URL は表示せず、QR の読み取りのみ想定しています。")
             }
 
             Section("遅刻 / 早退") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("時計付きの人物アイコンから開きます。サークル全員を ON / OFF で参加管理します。")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Label("ON … 遅刻参加。以降の未実施試合に組み込まれます", systemImage: "person.badge.plus")
-                    Label("OFF … 早退。試合済・試合中の名前は残り、それ以降の試合からは除外されます", systemImage: "person.badge.minus")
-                    Label("試合中の選手は OFF にできません", systemImage: "sportscourt.fill")
-                    Label("参加者は常に4名以上必要です", systemImage: "person.3")
-                    Label("変更後、試合済・試合中以外の未実施試合が自動で作り直されます", systemImage: "arrow.triangle.2.circlepath")
+                    helpText("時計付きの人物アイコンから開きます。サークル全員を ON / OFF で参加管理します。")
+                    helpLabel("ON … 遅刻参加。以降の未実施試合に組み込まれます", systemImage: "person.badge.plus")
+                    helpLabel("OFF … 早退。試合済・試合中の名前は残り、それ以降の試合からは除外されます", systemImage: "person.badge.minus")
+                    helpLabel("試合中の選手は OFF にできません", systemImage: "sportscourt.fill")
+                    helpLabel("参加者は常に4名以上必要です", systemImage: "person.3")
+                    helpLabel("変更後、試合済・試合中以外の未実施試合が自動で作り直されます", systemImage: "arrow.triangle.2.circlepath")
                 }
-                .font(.subheadline)
                 .padding(.vertical, 4)
+                .listRowInsets(Self.wideRowInsets)
             }
 
             Section {
                 HelpProgressIntroDiagram()
+                    .listRowInsets(Self.wideRowInsets)
             } header: {
                 Text("試合中の変更")
             } footer: {
-                Text("右の「○コート」または「試合中」バッジをタップして切り替えます。参加者 Web にも反映されます。")
+                helpText("右の「○コート」または「試合中」バッジをタップして切り替えます。参加者 Web にも反映されます。")
             }
 
             Section("その他の試合操作") {
-                Label("未実施の試合を右スワイプ … 「試合済」にします", systemImage: "checkmark.circle")
-                Label("未実施の選手名をタップ … 別の参加者と入れ替えます", systemImage: "arrow.left.arrow.right")
+                helpLabel("未実施の試合を右スワイプ … 「試合済」にします", systemImage: "checkmark.circle")
+                helpLabel("未実施の選手名をタップ … 別の参加者と入れ替えます", systemImage: "arrow.left.arrow.right")
             }
-            .font(.subheadline)
 
             Section("自動削除") {
-                Text("試合データは翌日 4:00（日本時間）にクラウドから自動削除されます。イベント終了後に前日のデータが残り続けることはありません。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                helpText("試合データは翌日 4:00（日本時間）にクラウドから自動削除されます。イベント終了後に前日のデータが残り続けることはありません。")
             }
         }
         .navigationTitle("試合一覧の説明")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private static let wideRowInsets = EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
+
+    private func helpText(_ string: String) -> some View {
+        Text(string)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func helpLabel(_ title: String, systemImage: String) -> some View {
+        Label {
+            Text(title)
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: systemImage)
+        }
     }
 }
 
@@ -134,11 +143,13 @@ private struct HelpProgressIntroDiagram: View {
             )
         }
         .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 private struct HelpProgressStep: View {
-    struct Row {
+    struct Row: Identifiable {
+        let id = UUID()
         let label: String
         let badge: HelpMatchBadgeStyle
         var note: String?
@@ -154,37 +165,40 @@ private struct HelpProgressStep: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
 
             if let beforeAfter {
-                HStack(alignment: .top, spacing: 12) {
-                    HelpProgressRowList(rows: beforeAfter.0)
-                    Image(systemName: "arrow.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 14)
-                    HelpProgressRowList(rows: beforeAfter.1)
+                VStack(alignment: .leading, spacing: 10) {
+                    HelpProgressRowList(rows: beforeAfter.0, title: "変更前")
+                    HelpDiagramArrow()
+                    HelpProgressRowList(rows: beforeAfter.1, title: "変更後")
                 }
             } else {
-                HelpProgressRowList(
-                    rows: rows,
-                    highlightIndex: highlightRowIndex
-                )
+                HelpProgressRowList(rows: rows, highlightIndex: highlightRowIndex)
             }
 
             Text(caption)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 private struct HelpProgressRowList: View {
     let rows: [HelpProgressStep.Row]
     var highlightIndex: Int?
+    var title: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+            if let title {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                 HelpMatchRow(
                     label: row.label,
                     badge: row.badge,
@@ -207,20 +221,23 @@ private struct HelpMatchRow: View {
     var highlighted: Bool = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .font(.caption.weight(.medium))
-                .frame(width: 52, alignment: .leading)
-            HelpMatchBadge(style: badge)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(label)
+                    .font(.caption.weight(.medium))
+                HelpMatchBadge(style: badge)
+                Spacer(minLength: 0)
+            }
             if let note {
                 Text(note)
                     .font(.caption2)
                     .foregroundStyle(highlighted ? .orange : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
         }
-        .padding(.vertical, 2)
-        .padding(.horizontal, highlighted ? 4 : 0)
+        .padding(.vertical, 4)
+        .padding(.horizontal, highlighted ? 6 : 0)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(highlighted ? Color.orange.opacity(0.08) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
