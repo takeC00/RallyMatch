@@ -31,37 +31,43 @@ struct PlayerParticipationView: View {
                 }
             }
 
-            Section("出場回数") {
-                ForEach(rows) { row in
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(row.player.name)
-                                .font(.headline)
-                                .foregroundStyle(levelColor(row.player.level))
-                            Text(row.player.level.label)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text("\(row.matchCount) 試合")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(row.matchCount >= target ? .primary : .orange)
-                            Text("\(row.matchCount)/\(target)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 2)
+            Section {
+                ForEach(rows, id: \.id) { row in
+                    participationRow(row)
                 }
+            } header: {
+                Text("出場回数")
             } footer: {
                 Text("試合数が少ない順に表示しています")
             }
         }
         .navigationTitle("出場回数")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func participationRow(_ row: PlayerParticipation) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(row.player.name)
+                    .font(.headline)
+                    .foregroundStyle(levelColor(row.player.level))
+                Text(row.player.level.label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("\(row.matchCount) 試合")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(row.matchCount >= target ? Color.primary : Color.orange)
+                Text("\(row.matchCount)/\(target)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     private func levelColor(_ level: PlayerLevel) -> Color {
