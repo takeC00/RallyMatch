@@ -3,6 +3,23 @@ import Foundation
 /// ダブルス試合を生成。全員が目標試合数に近づくよう、出場回数の少ない選手を優先する。
 struct MatchGenerator {
     private static let maxCandidatePoolSize = 14
+
+    /// 生成ごとに変わる並び・同点時の選び方（同じ参加者でも毎回組み合わせが変わる）
+    private struct GenerationRandomness {
+        private let playerOrder: [UUID: Int]
+
+        init(players: [SessionPlayer]) {
+            var order: [UUID: Int] = [:]
+            for (index, player) in players.shuffled().enumerated() {
+                order[player.id] = index
+            }
+            playerOrder = order
+        }
+
+        func prefersFirst(_ a: UUID, _ b: UUID) -> Bool {
+            (playerOrder[a] ?? Int.max) < (playerOrder[b] ?? Int.max)
+        }
+    }
     private struct PlayerState {
         let player: SessionPlayer
         var matchCount: Int = 0
@@ -46,7 +63,8 @@ struct MatchGenerator {
         guard players.count >= 4 else { return existingDone.filter { $0.status == .done } }
 
         let target = max(1, matchPerPlayer)
-        var states = buildInitialStates(players: players, existingDone: existingDone)
+        let randomness = GenerationRandomness(players: players)
+        var states = buildInitialStates(players: players.shuffled(), existingDone: existingDone)
         var history = History()
         for m in existingDone where m.status == .done {
             recordMatch(m, into: &history)
@@ -63,7 +81,8 @@ struct MatchGenerator {
                 mode: mode,
                 matchIndex: matchNo,
                 history: history,
-                target: target
+                target: target,
+                randomness: randomness
             ) else {
                 break
             }
@@ -81,7 +100,11 @@ struct MatchGenerator {
             matchIndex += 1
         }
 
-        return result.sorted { $0.matchNo < $1.matchNo }
+        let sorted = result.sorted { $0.matchNo < $1.matchNo }
+        return MatchRoundHelper.assignRounds(
+            to: sorted,
+            playerIds: players.map(\.id)
+        )
     }
 
     static func regenerateScheduled(
@@ -126,12 +149,15 @@ struct MatchGenerator {
         mode: GenerationMode,
         matchIndex: Int,
         history: History,
-        target: Int
+        target: Int,
+        randomness: GenerationRandomness
     ) -> (team1: [UUID], team2: [UUID])? {
-        let pool = candidatePool(states: states, target: target)
+        var pool = candidatePool(states: states, target: target, randomness: randomness)
         guard pool.count >= 4 else { return nil }
+        pool.shuffle()
 
-        var best: (team1: [UUID], team2: [UUID], score: Int)?
+        var bestScore: Int?
+        var tiedBest: [(team1: [UUID], team2: [UUID])] = []
 
         for quartet in combinations(pool, choose: 4) {
             for (t1, t2) in teamSplits(for: quartet) {
@@ -144,18 +170,25 @@ struct MatchGenerator {
                     history: history,
                     target: target
                 )
-                if best == nil || score < best!.score {
-                    best = (t1, t2, score)
+                if bestScore == nil || score < bestScore! {
+                    bestScore = score
+                    tiedBest = [(t1, t2)]
+                } else if score == bestScore {
+                    tiedBest.append((t1, t2))
                 }
             }
         }
 
-        if let best { return (best.team1, best.team2) }
-        return nil
+        guard let pick = tiedBest.randomElement() else { return nil }
+        return (pick.team1, pick.team2)
     }
 
     /// 次の試合の候補プレイヤー（出場不足・休憩が長い人を優先）
-    private static func candidatePool(states: [PlayerState], target: Int) -> [UUID] {
+    private static func candidatePool(
+        states: [PlayerState],
+        target: Int,
+        randomness: GenerationRandomness
+    ) -> [UUID] {
         let minCount = states.map(\.matchCount).min() ?? 0
 
         let sorted = states.sorted { a, b in
@@ -173,7 +206,7 @@ struct MatchGenerator {
                 return a.consecutiveRests > b.consecutiveRests
             }
 
-            return a.player.name < b.player.name
+            return randomness.prefersFirst(a.player.id, b.player.id)
         }
 
         let belowTarget = sorted.filter { $0.matchCount < target }

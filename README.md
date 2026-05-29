@@ -56,7 +56,7 @@ iOS **設定** の URL も同じ値にしてください。
    - 製品: `FirebaseAuth`, `FirebaseFirestore`, `FirebaseCore`
 3. `GoogleService-Info.plist` を `RallyMatch/` に置く（未配置だとクラウド同期不可）
 4. **Authentication → 匿名** を有効化
-5. アプリ内 **設定** で Hosting の URL を入力（QR 生成用）
+5. QR 用の参加者 URL は `GoogleService-Info.plist` のプロジェクト ID から自動設定（設定画面で確認可能）
 
 ## URL 仕様
 

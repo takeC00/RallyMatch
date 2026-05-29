@@ -3,8 +3,11 @@ import SwiftData
 
 struct MatchGenerationTabView: View {
     @Environment(SessionStore.self) private var sessionStore
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \Circle.createdAt) private var circles: [Circle]
     @Query private var allPlayers: [Player]
+    @State private var showNewSessionConfirm = false
+    @State private var isEndingSession = false
 
     private var hasActiveSession: Bool {
         sessionStore.sessionId != nil && !sessionStore.matches.isEmpty
@@ -53,10 +56,23 @@ struct MatchGenerationTabView: View {
                 if hasActiveSession {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("新規") {
-                            sessionStore.reset()
+                            showNewSessionConfirm = true
                         }
+                        .disabled(isEndingSession)
                     }
                 }
+            }
+            .confirmationDialog(
+                "新しい試合を作成しますか？",
+                isPresented: $showNewSessionConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("破棄して新規作成", role: .destructive) {
+                    Task { await endCurrentSessionAndReset() }
+                }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("進行中の試合はクラウドからも削除され、元に戻せません。参加者用のQRも無効になります。")
             }
             .sheet(isPresented: $store.showParticipationSummary) {
                 NavigationStack {
@@ -75,5 +91,31 @@ struct MatchGenerationTabView: View {
 
     private func playerCount(for circle: Circle) -> Int {
         allPlayers.filter { $0.circleId == circle.id }.count
+    }
+
+    private func endCurrentSessionAndReset() async {
+        isEndingSession = true
+        defer { isEndingSession = false }
+
+        let sessionId = sessionStore.sessionId
+        let circleId = sessionStore.circleId
+
+        if let sessionId {
+            do {
+                try await SessionSyncService.shared.deleteSession(sessionId: sessionId)
+            } catch {
+                sessionStore.reportSyncError(error, context: "クラウドの試合削除に失敗しました")
+                return
+            }
+        }
+
+        if let circleId,
+           let circle = circles.first(where: { $0.id == circleId }),
+           circle.activeSessionId == sessionId {
+            circle.activeSessionId = nil
+            try? modelContext.save()
+        }
+
+        sessionStore.reset()
     }
 }

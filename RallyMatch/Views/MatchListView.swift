@@ -9,23 +9,54 @@ struct MatchListView: View {
     @State private var showAddPlayers = false
 
     private var scheduledRoundGroups: [(round: Int, matches: [GeneratedMatch])] {
-        MatchRoundHelper.groups(
-            from: sessionStore.scheduledMatches,
-            playerIds: sessionStore.players.map(\.id)
-        )
+        MatchRoundHelper.groupsByStoredRound(from: sessionStore.scheduledMatches)
     }
 
     var body: some View {
         List {
             if let err = sessionStore.errorMessage {
-                Text(err).foregroundStyle(.red)
+                Section {
+                    Label {
+                        Text(err)
+                            .font(.subheadline)
+                    } icon: {
+                        Image(systemName: sessionStore.isQuotaLimited
+                            ? "exclamationmark.triangle.fill"
+                            : "xmark.circle.fill")
+                    }
+                    .foregroundStyle(sessionStore.isQuotaLimited ? .orange : .red)
+                } header: {
+                    Text(sessionStore.isQuotaLimited ? "クラウド連携を一時停止中" : "エラー")
+                }
+            }
+
+            Section {
+                NavigationLink {
+                    PlayerParticipationView(sessionStore: sessionStore)
+                } label: {
+                    Label("出場回数", systemImage: "person.3.sequence")
+                }
+                NavigationLink {
+                    PairCombinationView(sessionStore: sessionStore)
+                } label: {
+                    Label("ペア組み合わせ", systemImage: "person.2.circle")
+                }
+                NavigationLink {
+                    PlayerNextMatchWaitView(sessionStore: sessionStore)
+                } label: {
+                    Label("次の試合まで", systemImage: "clock.arrow.circlepath")
+                }
+            } header: {
+                Text("確認")
             }
 
             if !sessionStore.doneMatches.isEmpty {
-                Section("試合済") {
+                Section {
                     ForEach(sessionStore.doneMatches) { match in
                         MatchRowView(match: match, sessionStore: sessionStore) { _ in }
                     }
+                } header: {
+                    Text("試合済")
                 }
             }
 
@@ -40,14 +71,21 @@ struct MatchListView: View {
             }
         }
         .navigationTitle("試合一覧")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            sessionStore.ensureRoundNumbers()
+        }
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                NavigationLink {
-                    PlayerParticipationView(sessionStore: sessionStore)
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showQR = true
                 } label: {
-                    Label("出場回数", systemImage: "person.3.sequence")
+                    Image(systemName: "qrcode")
                 }
-                Button("QR") { showQR = true }
+                .disabled(sessionStore.sessionId == nil)
+                .accessibilityLabel("QRコード")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("参加者を追加") { showAddPlayers = true }
                     Button("未実施のみ再生成") { regenerate() }
@@ -109,19 +147,34 @@ struct MatchListView: View {
     private func regenerate() {
         sessionStore.regenerateScheduled()
         Task {
-            try? await sessionStore.syncMatches()
+            do {
+                try await sessionStore.syncMatches()
+                sessionStore.clearSyncError()
+            } catch {
+                sessionStore.reportSyncError(error)
+            }
         }
     }
 
     private func markMatchDone(_ match: GeneratedMatch) {
         Task {
-            try? await sessionStore.syncMarkMatchDone(match.id)
+            do {
+                try await sessionStore.syncMarkMatchDone(match.id)
+                sessionStore.clearSyncError()
+            } catch {
+                sessionStore.reportSyncError(error)
+            }
         }
     }
 
     private func syncAll() {
         Task {
-            try? await sessionStore.syncAllMatches()
+            do {
+                try await sessionStore.syncAllMatches()
+                sessionStore.clearSyncError()
+            } catch {
+                sessionStore.reportSyncError(error)
+            }
         }
     }
 }
@@ -201,5 +254,274 @@ struct MatchRowView: View {
 
     private func color(for id: UUID) -> Color {
         sessionStore.playerLevel(for: id) == .experienced ? .red : .blue
+    }
+}
+
+// MARK: - 確認画面用の統計
+
+struct TeammatePair: Identifiable {
+    let player1: SessionPlayer
+    let player2: SessionPlayer
+    let count: Int
+
+    var id: String {
+        MatchListPairStats.pairKey(player1.id, player2.id)
+    }
+}
+
+private enum MatchListPairStats {
+    static func pairKey(_ x: UUID, _ y: UUID) -> String {
+        if x.uuidString < y.uuidString {
+            return "\(x.uuidString)|\(y.uuidString)"
+        }
+        return "\(y.uuidString)|\(x.uuidString)"
+    }
+
+    static func teammatePairCounts(
+        players: [SessionPlayer],
+        matches: [GeneratedMatch]
+    ) -> [TeammatePair] {
+        var counts: [String: Int] = [:]
+        let active = matches.filter { $0.status != .cancelled }
+
+        for match in active {
+            recordTeam(match.team1, into: &counts)
+            recordTeam(match.team2, into: &counts)
+        }
+
+        var result: [TeammatePair] = []
+        for i in 0 ..< players.count {
+            for j in (i + 1) ..< players.count {
+                let key = pairKey(players[i].id, players[j].id)
+                let count = counts[key, default: 0]
+                guard count > 0 else { continue }
+                result.append(
+                    TeammatePair(
+                        player1: players[i],
+                        player2: players[j],
+                        count: count
+                    )
+                )
+            }
+        }
+
+        return result.sorted { lhs, rhs in
+            if lhs.count != rhs.count { return lhs.count < rhs.count }
+            if lhs.player1.name != rhs.player1.name { return lhs.player1.name < rhs.player1.name }
+            return lhs.player2.name < rhs.player2.name
+        }
+    }
+
+    private static func recordTeam(_ team: [UUID], into counts: inout [String: Int]) {
+        guard team.count == 2 else { return }
+        counts[pairKey(team[0], team[1]), default: 0] += 1
+    }
+}
+
+struct PlayerNextMatchWait: Identifiable {
+    let player: SessionPlayer
+    let matchesUntilNext: Int?
+    let nextMatchNo: Int?
+
+    var id: UUID { player.id }
+}
+
+private enum MatchListNextMatchStats {
+    static func waits(
+        players: [SessionPlayer],
+        scheduledMatches: [GeneratedMatch]
+    ) -> [PlayerNextMatchWait] {
+        let ordered = scheduledMatches
+            .filter { $0.status == .scheduled }
+            .sorted { $0.matchNo < $1.matchNo }
+
+        return players
+            .map { player in
+                if let index = ordered.firstIndex(where: { $0.playerIds.contains(player.id) }) {
+                    return PlayerNextMatchWait(
+                        player: player,
+                        matchesUntilNext: index,
+                        nextMatchNo: ordered[index].matchNo
+                    )
+                }
+                return PlayerNextMatchWait(
+                    player: player,
+                    matchesUntilNext: nil,
+                    nextMatchNo: nil
+                )
+            }
+            .sorted { lhs, rhs in
+                switch (lhs.matchesUntilNext, rhs.matchesUntilNext) {
+                case let (l?, r?):
+                    if l != r { return l < r }
+                    return lhs.player.name < rhs.player.name
+                case (nil, nil):
+                    return lhs.player.name < rhs.player.name
+                case (nil, _):
+                    return false
+                case (_, nil):
+                    return true
+                }
+            }
+    }
+}
+
+// MARK: - 確認画面
+
+struct PairCombinationView: View {
+    @Bindable var sessionStore: SessionStore
+
+    private var rows: [TeammatePair] {
+        MatchListPairStats.teammatePairCounts(
+            players: sessionStore.players,
+            matches: sessionStore.matches
+        )
+    }
+
+    private var maxCount: Int {
+        rows.map(\.count).max() ?? 0
+    }
+
+    var body: some View {
+        List {
+            Section {
+                HStack {
+                    Text("参加者")
+                    Spacer()
+                    Text("\(sessionStore.players.count) 名")
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text("組み合わせ数")
+                    Spacer()
+                    Text("\(rows.count) 通り")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section {
+                ForEach(rows) { row in
+                    pairRow(row)
+                }
+            } header: {
+                Text("ペアの組み合わせ")
+            } footer: {
+                Text("同じチーム（ペア）として出た組み合わせのみ表示しています。回数が少ない順です。")
+            }
+        }
+        .navigationTitle("ペア組み合わせ")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func pairRow(_ row: TeammatePair) -> some View {
+        HStack(spacing: 12) {
+            pairNames(row)
+            Spacer()
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("\(row.count) 回")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(row.count == maxCount && maxCount > 1 ? Color.orange : Color.primary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func pairNames(_ row: TeammatePair) -> some View {
+        HStack(spacing: 2) {
+            Text(row.player1.name)
+                .font(.headline)
+                .foregroundStyle(levelColor(row.player1.level))
+            Text("・")
+                .foregroundStyle(.secondary)
+            Text(row.player2.name)
+                .font(.headline)
+                .foregroundStyle(levelColor(row.player2.level))
+        }
+    }
+
+    private func levelColor(_ level: PlayerLevel) -> Color {
+        level == .experienced ? .red : .blue
+    }
+}
+
+struct PlayerNextMatchWaitView: View {
+    @Bindable var sessionStore: SessionStore
+
+    private var rows: [PlayerNextMatchWait] {
+        MatchListNextMatchStats.waits(
+            players: sessionStore.players,
+            scheduledMatches: sessionStore.scheduledMatches
+        )
+    }
+
+    private var scheduledCount: Int {
+        sessionStore.scheduledMatches.count
+    }
+
+    var body: some View {
+        List {
+            Section {
+                HStack {
+                    Text("未実施の試合")
+                    Spacer()
+                    Text("\(scheduledCount) 試合")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section {
+                ForEach(rows) { row in
+                    waitRow(row)
+                }
+            } header: {
+                Text("次の試合まで")
+            } footer: {
+                Text("未実施の試合を上から順に数え、次に出場する試合の直前までの試合数です。0 は次の試合に出場します。")
+            }
+        }
+        .navigationTitle("次の試合まで")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func waitRow(_ row: PlayerNextMatchWait) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(row.player.name)
+                    .font(.headline)
+                    .foregroundStyle(levelColor(row.player.level))
+                Text(row.player.level.label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(waitLabel(for: row))
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(waitColor(for: row))
+                if let matchNo = row.nextMatchNo {
+                    Text("第\(matchNo)試合")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func waitLabel(for row: PlayerNextMatchWait) -> String {
+        guard let wait = row.matchesUntilNext else { return "予定なし" }
+        if wait == 0 { return "次の試合" }
+        return "あと \(wait) 試合"
+    }
+
+    private func waitColor(for row: PlayerNextMatchWait) -> Color {
+        guard let wait = row.matchesUntilNext else { return .secondary }
+        if wait == 0 { return .green }
+        if wait >= 3 { return .orange }
+        return .primary
+    }
+
+    private func levelColor(_ level: PlayerLevel) -> Color {
+        level == .experienced ? .red : .blue
     }
 }

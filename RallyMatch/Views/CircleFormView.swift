@@ -14,9 +14,6 @@ struct CircleFormView: View {
         .navigationTitle("サークル作成")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("キャンセル") { dismiss() }
-            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存") { save() }
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)

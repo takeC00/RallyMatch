@@ -13,6 +13,7 @@ final class SessionStore {
     var matchPerPlayer: Int = 3
     var isSyncing = false
     var errorMessage: String?
+    var isQuotaLimited = false
     var showParticipationSummary = false
 
     var participationRows: [PlayerParticipation] {
@@ -33,7 +34,18 @@ final class SessionStore {
         players = []
         matches = []
         errorMessage = nil
+        isQuotaLimited = false
         showParticipationSummary = false
+    }
+
+    func reportSyncError(_ error: Error, context: String? = nil) {
+        isQuotaLimited = FirebaseUsageError.isQuotaExceeded(error)
+        errorMessage = FirebaseUsageError.userFacingMessage(for: error, context: context)
+    }
+
+    func clearSyncError() {
+        errorMessage = nil
+        isQuotaLimited = false
     }
 
     func generateMatches() {
@@ -42,6 +54,16 @@ final class SessionStore {
             mode: mode,
             matchPerPlayer: matchPerPlayer,
             courtCount: courtCount
+        )
+        ensureRoundNumbers()
+    }
+
+    /// 旧データなど roundNo 未設定のときに全試合から巡を再計算
+    func ensureRoundNumbers() {
+        guard matches.contains(where: { $0.roundNo < 1 }) else { return }
+        matches = MatchRoundHelper.assignRounds(
+            to: matches,
+            playerIds: players.map(\.id)
         )
     }
 

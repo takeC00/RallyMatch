@@ -3,9 +3,12 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable private var firebase = FirebaseManager.shared
-    @State private var hostingURL = AppConfig.hostingBaseURL
 
     var showsDismissButtons: Bool = true
+
+    private var hostingURL: String {
+        AppConfig.hostingBaseURL
+    }
 
     var body: some View {
         Form {
@@ -36,43 +39,25 @@ struct SettingsView: View {
             }
 
             Section {
-                TextField("https://your-project.web.app", text: $hostingURL)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-            } header: {
-                Text("参加者用 URL（Firebase Hosting）")
-            } footer: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("QRコードは {URL}/session/{sessionId} 形式で生成されます")
-                    Text("推奨: \(AppFirebaseConfig.defaultHostingURL)")
-                        .font(.caption)
+                LabeledContent("参加者用 URL") {
+                    Text(hostingURL)
+                        .font(.subheadline)
+                        .foregroundStyle(.blue)
+                        .multilineTextAlignment(.trailing)
                 }
+            } header: {
+                Text("QRコード")
+            } footer: {
+                Text("QRコードは {URL}/session/{sessionId} 形式で生成されます。URLは Firebase プロジェクトから自動設定されます。")
             }
         }
         .navigationTitle("設定")
         .toolbar {
             if showsDismissButtons {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        save()
-                        dismiss()
-                    }
-                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("閉じる") { dismiss() }
                 }
-            } else {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
-                }
             }
         }
-        .onAppear {
-            hostingURL = AppConfig.hostingBaseURL
-        }
-    }
-
-    private func save() {
-        AppConfig.hostingBaseURL = hostingURL
     }
 }

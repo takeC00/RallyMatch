@@ -1,23 +1,9 @@
 import Foundation
 
 enum AppConfig {
-    private static let hostingURLKey = "hostingBaseURL"
-
-    /// Firebase Hosting のベース URL（末尾スラッシュなし）
-    /// 例: https://your-project.web.app
+    /// Firebase Hosting のベース URL（GoogleService-Info.plist の PROJECT_ID から自動）
     static var hostingBaseURL: String {
-        get {
-            let saved = UserDefaults.standard.string(forKey: hostingURLKey)
-            if let saved, !saved.isEmpty, !saved.contains("YOUR_PROJECT") {
-                return saved
-            }
-            return AppFirebaseConfig.defaultHostingURL
-        }
-        set {
-            var trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            while trimmed.hasSuffix("/") { trimmed.removeLast() }
-            UserDefaults.standard.set(trimmed, forKey: hostingURLKey)
-        }
+        AppFirebaseConfig.defaultHostingURL
     }
 
     static func sessionURL(sessionId: String) -> URL? {

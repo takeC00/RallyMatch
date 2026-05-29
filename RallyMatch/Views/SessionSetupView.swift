@@ -12,6 +12,7 @@ struct SessionSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showAddPlayer = false
     @State private var isGenerating = false
+    @State private var showGenerationHelp = false
 
     private var circlePlayers: [Player] {
         allPlayers.filter { $0.circleId == circle.id }.sorted { $0.name < $1.name }
@@ -54,14 +55,24 @@ struct SessionSetupView: View {
                 Button("参加者を追加") { showAddPlayer = true }
             }
 
-            Section("生成条件") {
+            Section {
                 Picker("生成モード", selection: $sessionStore.mode) {
                     ForEach(GenerationMode.allCases) { m in
                         Text(m.label).tag(m)
                     }
                 }
-                Stepper("1人あたり試合数: \(sessionStore.matchPerPlayer)", value: $sessionStore.matchPerPlayer, in: 1...20)
-                Stepper("コート数: \(sessionStore.courtCount)", value: $sessionStore.courtCount, in: 1...20)
+                BlueValueStepperRow(
+                    title: "1人あたり試合数",
+                    value: $sessionStore.matchPerPlayer,
+                    range: 1...20
+                )
+                BlueValueStepperRow(
+                    title: "コート数",
+                    value: $sessionStore.courtCount,
+                    range: 1...20
+                )
+            } header: {
+                GenerationConditionsSectionHeader(showHelp: $showGenerationHelp)
             }
 
             Section {
@@ -84,6 +95,9 @@ struct SessionSetupView: View {
             }
         }
         .navigationTitle("試合設定")
+        .navigationDestination(isPresented: $showGenerationHelp) {
+            GenerationSettingsHelpView()
+        }
         .sheet(isPresented: $showAddPlayer) {
             NavigationStack {
                 PlayerFormView(circle: circle, player: nil)
@@ -127,17 +141,60 @@ struct SessionSetupView: View {
         sessionStore.players = circlePlayers
             .filter { selectedIds.contains($0.id) }
             .map(SessionPlayer.init(from:))
+        sessionStore.circleId = circle.id
         sessionStore.sessionId = UUID().uuidString.lowercased()
         sessionStore.generateMatches()
 
         guard let uid = firebase.uid else { return }
         do {
+            if let previousId = circle.activeSessionId, previousId != sessionStore.sessionId {
+                try await SessionSyncService.shared.deleteSession(sessionId: previousId)
+            }
             try await sessionStore.syncCreate(ownerUid: uid)
+            circle.activeSessionId = sessionStore.sessionId
+            try modelContext.save()
             sessionStore.errorMessage = nil
             sessionStore.showParticipationSummary = true
             dismiss()
         } catch {
-            sessionStore.errorMessage = error.localizedDescription
+            sessionStore.reportSyncError(error)
+        }
+    }
+}
+
+private struct GenerationConditionsSectionHeader: View {
+    @Binding var showHelp: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 6) {
+            Text("生成条件")
+            Button {
+                showHelp = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.body)
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+        }
+        .textCase(nil)
+    }
+}
+
+private struct BlueValueStepperRow: View {
+    let title: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Text("\(value)")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.blue)
+            Spacer()
+            Stepper("", value: $value, in: range)
+                .labelsHidden()
         }
     }
 }

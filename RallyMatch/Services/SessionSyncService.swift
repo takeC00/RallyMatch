@@ -73,6 +73,7 @@ final class SessionSyncService {
             batch.setData([
                 "matchNo": m.matchNo,
                 "courtNo": m.courtNo,
+                "roundNo": m.roundNo,
                 "team1": m.team1.map(\.uuidString),
                 "team2": m.team2.map(\.uuidString),
                 "playerIds": m.playerIds.map(\.uuidString),
@@ -94,6 +95,7 @@ final class SessionSyncService {
         try await ref.updateData([
             "matchNo": match.matchNo,
             "courtNo": match.courtNo,
+            "roundNo": match.roundNo,
             "team1": match.team1.map(\.uuidString),
             "team2": match.team2.map(\.uuidString),
             "playerIds": match.playerIds.map(\.uuidString),
@@ -105,6 +107,26 @@ final class SessionSyncService {
     func deleteMatch(_ matchId: UUID, sessionId: String) async throws {
         try await db.collection("sessions").document(sessionId)
             .collection("matches").document(matchId.uuidString).delete()
+    }
+
+    /// セッション本体と matches / sessionPlayers を削除
+    func deleteSession(sessionId: String) async throws {
+        let sessionRef = db.collection("sessions").document(sessionId)
+        try await deleteAllDocuments(in: sessionRef.collection("matches"))
+        try await deleteAllDocuments(in: sessionRef.collection("sessionPlayers"))
+        try await sessionRef.delete()
+    }
+
+    private func deleteAllDocuments(in collection: CollectionReference) async throws {
+        while true {
+            let snap = try await collection.limit(to: 300).getDocuments()
+            if snap.isEmpty { return }
+            let batch = db.batch()
+            for doc in snap.documents {
+                batch.deleteDocument(doc.reference)
+            }
+            try await batch.commit()
+        }
     }
 
     func markMatchesDone(upTo matchNo: Int, sessionId: String, matches: [GeneratedMatch]) async throws {

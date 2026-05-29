@@ -12,26 +12,32 @@ struct CircleDetailView: View {
     }
 
     var body: some View {
-        List {
-            Section("参加者") {
-                if players.isEmpty {
-                    Text("参加者を追加してください")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(players) { player in
-                        NavigationLink {
-                            PlayerFormView(circle: circle, player: player)
-                        } label: {
-                            HStack {
-                                Text(player.name)
-                                Spacer()
-                                Text(player.level.label)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+        Group {
+            if players.isEmpty {
+                ContentUnavailableView(
+                    "参加者がいません",
+                    systemImage: "person.crop.circle.badge.plus",
+                    description: Text("右上の＋から参加者を追加してください")
+                )
+            } else {
+                List {
+                    Section("参加者") {
+                        ForEach(players) { player in
+                            NavigationLink {
+                                PlayerFormView(circle: circle, player: player)
+                            } label: {
+                                HStack {
+                                    Text(player.name)
+                                        .foregroundStyle(levelColor(player.level))
+                                    Spacer()
+                                    Text(player.level.label)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
+                        .onDelete(perform: deletePlayers)
                     }
-                    .onDelete(perform: deletePlayers)
                 }
             }
         }
@@ -45,6 +51,10 @@ struct CircleDetailView: View {
                 }
             }
         }
+    }
+
+    private func levelColor(_ level: PlayerLevel) -> Color {
+        level == .experienced ? .red : .blue
     }
 
     private func deletePlayers(at offsets: IndexSet) {

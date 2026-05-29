@@ -66,12 +66,44 @@ body {
   margin: 1rem 0 0.25rem;
 }
 
+.section-label {
+  margin: 0.25rem 0 0.15rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #6b7280;
+  letter-spacing: 0.02em;
+}
+
+.section-label--done {
+  margin-top: 0;
+}
+
 .match-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 1rem 1.1rem;
   box-shadow: 0 6px 20px rgba(15, 118, 110, 0.08);
+}
+
+.match-card--done {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  box-shadow: none;
+}
+
+.match-card--done .court,
+.match-card--done .vs {
+  color: #6b7280;
+}
+
+.match-card--done .player.beginner {
+  color: #3b82f6;
+}
+
+.match-card--done .player.experienced {
+  color: #ef4444;
+  opacity: 0.9;
 }
 
 .match-title {
@@ -84,6 +116,17 @@ body {
   font-size: 0.9rem;
   color: var(--accent);
   font-weight: 600;
+}
+
+.done-badge {
+  display: inline-block;
+  margin: 0.35rem 0 0.75rem;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #4b5563;
+  background: #e5e7eb;
+  border-radius: 999px;
 }
 
 .teams-row {
@@ -142,6 +185,16 @@ body {
 
 .error {
   color: var(--error);
+}
+
+.error--quota {
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 12px;
+  margin: 0 1rem 1rem;
+  padding: 1rem 1.1rem;
+  text-align: left;
 }
 
 .hidden {

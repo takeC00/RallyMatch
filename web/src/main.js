@@ -14,11 +14,13 @@ function parseSessionId() {
   return params.get("session") || params.get("id");
 }
 
-function showError(message) {
+function showError(message, { quota = false } = {}) {
   errorEl.textContent = message;
+  errorEl.classList.toggle("error--quota", quota);
   errorEl.classList.remove("hidden");
-  statusEl.textContent = "";
+  statusEl.textContent = quota ? "一時停止中" : "";
   emptyEl.classList.add("hidden");
+  matchesEl.innerHTML = "";
 }
 
 /** 1巡 = 全員が最低1回出場し終わるまで */
@@ -76,6 +78,42 @@ function createTeamElement(ids, playerMap) {
   return team;
 }
 
+function createMatchCard(match, playerMap) {
+  const isDone = match.status === "done";
+
+  const card = document.createElement("article");
+  card.className = isDone ? "match-card match-card--done" : "match-card";
+
+  const title = document.createElement("h2");
+  title.className = "match-title";
+  title.textContent = `第${match.matchNo}試合`;
+
+  const meta = document.createElement("p");
+  if (isDone) {
+    meta.className = "done-badge";
+    meta.textContent = "試合済";
+  } else {
+    meta.className = "court";
+    meta.textContent = `${match.courtNo}コート`;
+  }
+
+  const teamsRow = document.createElement("div");
+  teamsRow.className = "teams-row";
+
+  const vs = document.createElement("span");
+  vs.className = "vs";
+  vs.textContent = "VS";
+
+  teamsRow.append(
+    createTeamElement(match.team1, playerMap),
+    vs,
+    createTeamElement(match.team2, playerMap)
+  );
+
+  card.append(title, meta, teamsRow);
+  return card;
+}
+
 function renderMatches(matches, playerMap) {
   matchesEl.innerHTML = "";
 
@@ -90,13 +128,30 @@ function renderMatches(matches, playerMap) {
 
   emptyEl.classList.add("hidden");
 
+  const done = visible.filter((m) => m.status === "done");
+  const scheduled = visible.filter((m) => m.status !== "done");
+
+  if (done.length > 0) {
+    const doneLabel = document.createElement("p");
+    doneLabel.className = "section-label section-label--done";
+    doneLabel.textContent = "試合済";
+    matchesEl.appendChild(doneLabel);
+
+    for (const match of done) {
+      matchesEl.appendChild(createMatchCard(match, playerMap));
+    }
+  }
+
   const playerIds = [...playerMap.keys()];
-  const roundOf = assignRounds(visible, playerIds);
+  const computedRounds = assignRounds(scheduled, playerIds);
 
   let currentRound = null;
 
-  for (const match of visible) {
-    const round = roundOf.get(match.id) ?? 1;
+  for (const match of scheduled) {
+    const round =
+      match.roundNo && match.roundNo > 0
+        ? match.roundNo
+        : computedRounds.get(match.id) ?? 1;
     if (round !== currentRound) {
       if (currentRound !== null) {
         const divider = document.createElement("hr");
@@ -112,36 +167,26 @@ function renderMatches(matches, playerMap) {
       currentRound = round;
     }
 
-    const card = document.createElement("article");
-    card.className = "match-card";
-
-    const title = document.createElement("h2");
-    title.className = "match-title";
-    title.textContent = `第${match.matchNo}試合`;
-
-    const court = document.createElement("p");
-    court.className = "court";
-    court.textContent = `${match.courtNo}コート`;
-
-    const teamsRow = document.createElement("div");
-    teamsRow.className = "teams-row";
-
-    const vs = document.createElement("span");
-    vs.className = "vs";
-    vs.textContent = "VS";
-
-    teamsRow.append(
-      createTeamElement(match.team1, playerMap),
-      vs,
-      createTeamElement(match.team2, playerMap)
-    );
-
-    card.append(title, court, teamsRow);
-    matchesEl.appendChild(card);
+    matchesEl.appendChild(createMatchCard(match, playerMap));
   }
 }
 
+const QUOTA_EXCEEDED_MESSAGE =
+  "Firebase の利用上限に達したため、一時的に試合一覧を表示できません。\n" +
+  "しばらく時間をおくか、翌日になってから再度アクセスしてください。\n" +
+  "主催者は Firebase Console の「使用状況」をご確認ください。";
+
+function isQuotaExceeded(err) {
+  const code = err?.code ?? "";
+  if (code === "resource-exhausted") return true;
+  const text = `${err?.message ?? ""} ${err?.details ?? ""}`.toLowerCase();
+  return text.includes("quota") || text.includes("resource exhausted");
+}
+
 function firestoreErrorMessage(err, context) {
+  if (isQuotaExceeded(err)) {
+    return QUOTA_EXCEEDED_MESSAGE;
+  }
   const code = err?.code ?? "";
   if (code === "not-found" || code === "permission-denied") {
     return (
@@ -175,7 +220,15 @@ async function start() {
   }
 
   const sessionRef = doc(db, "sessions", sessionId);
-  const sessionSnap = await getDoc(sessionRef);
+  let sessionSnap;
+  try {
+    sessionSnap = await getDoc(sessionRef);
+  } catch (err) {
+    console.error(err);
+    const message = firestoreErrorMessage(err, "セッション");
+    showError(message, { quota: isQuotaExceeded(err) });
+    return;
+  }
   if (!sessionSnap.exists()) {
     showError(
       `セッション「${sessionId}」が見つかりません。\n` +
@@ -206,7 +259,8 @@ async function start() {
     },
     (err) => {
       console.error(err);
-      showError(firestoreErrorMessage(err, "参加者情報"));
+      const message = firestoreErrorMessage(err, "参加者情報");
+      showError(message, { quota: isQuotaExceeded(err) });
     }
   );
 
@@ -222,6 +276,7 @@ async function start() {
           id: d.id,
           matchNo: data.matchNo ?? 0,
           courtNo: data.courtNo ?? 1,
+          roundNo: data.roundNo ?? 0,
           team1: data.team1 ?? [],
           team2: data.team2 ?? [],
           status: data.status ?? "scheduled",
@@ -231,7 +286,8 @@ async function start() {
     },
     (err) => {
       console.error(err);
-      showError(firestoreErrorMessage(err, "試合情報"));
+      const message = firestoreErrorMessage(err, "試合情報");
+      showError(message, { quota: isQuotaExceeded(err) });
     }
   );
 }

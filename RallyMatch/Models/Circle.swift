@@ -6,6 +6,8 @@ final class Circle {
     @Attribute(.unique) var id: UUID
     var name: String
     var createdAt: Date
+    /// クラウド上の現行セッション（1サークル1セッション）
+    var activeSessionId: String?
 
     @Relationship(deleteRule: .cascade, inverse: \Player.circle)
     var players: [Player] = []
