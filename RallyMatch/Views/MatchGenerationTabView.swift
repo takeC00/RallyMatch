@@ -19,7 +19,11 @@ struct MatchGenerationTabView: View {
         NavigationStack {
             Group {
                 if hasActiveSession {
-                    MatchListView(sessionStore: sessionStore)
+                    MatchListView(
+                        sessionStore: sessionStore,
+                        onRequestNewSession: { showNewSessionConfirm = true },
+                        isEndingSession: isEndingSession
+                    )
                 } else if circles.isEmpty {
                     ContentUnavailableView(
                         "サークルがありません",
@@ -52,16 +56,6 @@ struct MatchGenerationTabView: View {
                 }
             }
             .navigationTitle(hasActiveSession ? "試合一覧" : "試合生成")
-            .toolbar {
-                if hasActiveSession {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("新規") {
-                            showNewSessionConfirm = true
-                        }
-                        .disabled(isEndingSession)
-                    }
-                }
-            }
             .confirmationDialog(
                 "新しい試合を作成しますか？",
                 isPresented: $showNewSessionConfirm,

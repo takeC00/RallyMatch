@@ -2,11 +2,14 @@ import SwiftUI
 
 struct MatchListView: View {
     @Bindable var sessionStore: SessionStore
+    var onRequestNewSession: () -> Void = {}
+    var isEndingSession: Bool = false
     @State private var firebase = FirebaseManager.shared
     @State private var editingMatch: GeneratedMatch?
     @State private var editingPlayerId: UUID?
     @State private var showQR = false
     @State private var showAttendanceAdjust = false
+    @State private var showMatchListHelp = false
 
     private var scheduledRoundGroups: [(round: Int, matches: [GeneratedMatch])] {
         MatchRoundHelper.groupsByStoredRound(from: sessionStore.scheduledMatches)
@@ -57,6 +60,12 @@ struct MatchListView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                Button("新規") {
+                    onRequestNewSession()
+                }
+                .disabled(isEndingSession)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showQR = true
                 } label: {
@@ -74,6 +83,18 @@ struct MatchListView: View {
                     Image(systemName: "ellipsis.circle")
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showMatchListHelp = true
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                        .foregroundStyle(.orange)
+                }
+                .accessibilityLabel("操作の説明")
+            }
+        }
+        .navigationDestination(isPresented: $showMatchListHelp) {
+            MatchListHelpView()
         }
         .sheet(isPresented: $showQR) {
             if let id = sessionStore.sessionId {
