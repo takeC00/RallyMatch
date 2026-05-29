@@ -30,26 +30,6 @@ struct MatchListView: View {
                 }
             }
 
-            Section {
-                NavigationLink {
-                    PlayerParticipationView(sessionStore: sessionStore)
-                } label: {
-                    Label("出場回数", systemImage: "person.3.sequence")
-                }
-                NavigationLink {
-                    PairCombinationView(sessionStore: sessionStore)
-                } label: {
-                    Label("ペア組み合わせ", systemImage: "person.2.circle")
-                }
-                NavigationLink {
-                    PlayerNextMatchWaitView(sessionStore: sessionStore)
-                } label: {
-                    Label("次の試合まで", systemImage: "clock.arrow.circlepath")
-                }
-            } header: {
-                Text("確認")
-            }
-
             if !sessionStore.doneMatches.isEmpty {
                 Section {
                     ForEach(sessionStore.doneMatches) { match in
@@ -209,12 +189,7 @@ struct MatchRowView: View {
                 Text("第\(match.matchNo)試合")
                     .font(.headline)
                 Spacer()
-                Text(match.status == .done ? "済" : "\(match.courtNo)コート")
-                    .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(match.status == .done ? Color.gray.opacity(0.2) : Color.teal.opacity(0.15))
-                    .clipShape(Capsule())
+                statusBadge
             }
 
             HStack(alignment: .center, spacing: 10) {
@@ -254,6 +229,37 @@ struct MatchRowView: View {
 
     private func color(for id: UUID) -> Color {
         sessionStore.playerLevel(for: id) == .experienced ? .red : .blue
+    }
+
+    @ViewBuilder
+    private var statusBadge: some View {
+        if match.status == .done {
+            Text("済")
+                .font(.caption)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Color.gray.opacity(0.2))
+                .clipShape(Capsule())
+        } else if sessionStore.inProgressMatchIds.contains(match.id) {
+            HStack(spacing: 4) {
+                Image(systemName: "sportscourt.fill")
+                Text("試合中")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(Color.orange.opacity(0.15))
+            .clipShape(Capsule())
+        } else {
+            Text("\(match.courtNo)コート")
+                .font(.caption)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Color.teal.opacity(0.15))
+                .foregroundStyle(Color.teal)
+                .clipShape(Capsule())
+        }
     }
 }
 
@@ -320,7 +326,9 @@ private enum MatchListPairStats {
 
 struct PlayerNextMatchWait: Identifiable {
     let player: SessionPlayer
-    let matchesUntilNext: Int?
+    let isPlayingNow: Bool
+    /// 試合中でないときの「次の試合まで」数（1 始まり）
+    let waitUntilNext: Int?
     let nextMatchNo: Int?
 
     var id: UUID { player.id }
@@ -329,29 +337,37 @@ struct PlayerNextMatchWait: Identifiable {
 private enum MatchListNextMatchStats {
     static func waits(
         players: [SessionPlayer],
-        scheduledMatches: [GeneratedMatch]
+        scheduledMatches: [GeneratedMatch],
+        courtCount: Int
     ) -> [PlayerNextMatchWait] {
-        let ordered = scheduledMatches
-            .filter { $0.status == .scheduled }
-            .sorted { $0.matchNo < $1.matchNo }
+        let ordered = MatchProgressHelper.orderedScheduled(scheduledMatches)
 
         return players
             .map { player in
-                if let index = ordered.firstIndex(where: { $0.playerIds.contains(player.id) }) {
-                    return PlayerNextMatchWait(
-                        player: player,
-                        matchesUntilNext: index,
-                        nextMatchNo: ordered[index].matchNo
-                    )
-                }
+                let playing = MatchProgressHelper.isPlayerInProgress(
+                    playerId: player.id,
+                    scheduled: scheduledMatches,
+                    courtCount: courtCount
+                )
+                let index = ordered.firstIndex(where: { $0.playerIds.contains(player.id) })
                 return PlayerNextMatchWait(
                     player: player,
-                    matchesUntilNext: nil,
-                    nextMatchNo: nil
+                    isPlayingNow: playing,
+                    waitUntilNext: playing
+                        ? nil
+                        : MatchProgressHelper.waitUntilNext(
+                            playerId: player.id,
+                            scheduled: scheduledMatches,
+                            courtCount: courtCount
+                        ),
+                    nextMatchNo: index.map { ordered[$0].matchNo }
                 )
             }
             .sorted { lhs, rhs in
-                switch (lhs.matchesUntilNext, rhs.matchesUntilNext) {
+                if lhs.isPlayingNow != rhs.isPlayingNow {
+                    return lhs.isPlayingNow && !rhs.isPlayingNow
+                }
+                switch (lhs.waitUntilNext, rhs.waitUntilNext) {
                 case let (l?, r?):
                     if l != r { return l < r }
                     return lhs.player.name < rhs.player.name
@@ -450,8 +466,13 @@ struct PlayerNextMatchWaitView: View {
     private var rows: [PlayerNextMatchWait] {
         MatchListNextMatchStats.waits(
             players: sessionStore.players,
-            scheduledMatches: sessionStore.scheduledMatches
+            scheduledMatches: sessionStore.scheduledMatches,
+            courtCount: sessionStore.courtCount
         )
+    }
+
+    private var inProgressCount: Int {
+        sessionStore.inProgressMatchIds.count
     }
 
     private var scheduledCount: Int {
@@ -461,6 +482,12 @@ struct PlayerNextMatchWaitView: View {
     var body: some View {
         List {
             Section {
+                HStack {
+                    Text("試合中")
+                    Spacer()
+                    Text("\(inProgressCount) 試合")
+                        .foregroundStyle(.orange)
+                }
                 HStack {
                     Text("未実施の試合")
                     Spacer()
@@ -476,7 +503,7 @@ struct PlayerNextMatchWaitView: View {
             } header: {
                 Text("次の試合まで")
             } footer: {
-                Text("未実施の試合を上から順に数え、次に出場する試合の直前までの試合数です。0 は次の試合に出場します。")
+                Text("先頭のコート数ぶんが試合中です。それ以外は「次の試合まで 1、2、3…」と表示します。")
             }
         }
         .navigationTitle("次の試合まで")
@@ -495,9 +522,15 @@ struct PlayerNextMatchWaitView: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
-                Text(waitLabel(for: row))
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(waitColor(for: row))
+                HStack(spacing: 4) {
+                    if row.isPlayingNow {
+                        Image(systemName: "sportscourt.fill")
+                            .foregroundStyle(.orange)
+                    }
+                    Text(waitLabel(for: row))
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(waitColor(for: row))
+                }
                 if let matchNo = row.nextMatchNo {
                     Text("第\(matchNo)試合")
                         .font(.caption)
@@ -509,14 +542,14 @@ struct PlayerNextMatchWaitView: View {
     }
 
     private func waitLabel(for row: PlayerNextMatchWait) -> String {
-        guard let wait = row.matchesUntilNext else { return "予定なし" }
-        if wait == 0 { return "次の試合" }
-        return "あと \(wait) 試合"
+        if row.isPlayingNow { return "試合中" }
+        guard let wait = row.waitUntilNext else { return "予定なし" }
+        return "次の試合まで\(wait)"
     }
 
     private func waitColor(for row: PlayerNextMatchWait) -> Color {
-        guard let wait = row.matchesUntilNext else { return .secondary }
-        if wait == 0 { return .green }
+        if row.isPlayingNow { return .orange }
+        guard let wait = row.waitUntilNext else { return .secondary }
         if wait >= 3 { return .orange }
         return .primary
     }

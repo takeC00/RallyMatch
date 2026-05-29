@@ -28,6 +28,14 @@ final class SessionStore {
         matches.filter { $0.status == .done }.sorted { $0.matchNo < $1.matchNo }
     }
 
+    /// 未実施の先頭（コート数ぶん）＝現在試合中
+    var inProgressMatchIds: Set<UUID> {
+        MatchProgressHelper.inProgressMatchIds(
+            scheduled: scheduledMatches,
+            courtCount: courtCount
+        )
+    }
+
     func reset() {
         sessionId = nil
         circleId = nil

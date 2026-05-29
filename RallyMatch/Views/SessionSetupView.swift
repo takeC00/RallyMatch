@@ -27,7 +27,7 @@ struct SessionSetupView: View {
             return "当日参加者を4名以上選択してください（現在 \(selectedIds.count) 名）"
         }
         if !firebase.isPlistConfigured {
-            return "GoogleService-Info.plist が未設定です（設定画面を確認）"
+            return "GoogleService-Info.plist が未設定です（Firebase の設定を確認）"
         }
         if firebase.uid == nil {
             if let err = firebase.lastError {
@@ -40,7 +40,12 @@ struct SessionSetupView: View {
 
     var body: some View {
         Form {
-            Section("当日参加者") {
+            Section {
+                Text("当日に参加する方は、スイッチをオンにしてください。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 8, trailing: 20))
+
                 ForEach(circlePlayers) { player in
                     Toggle(isOn: binding(for: player.id)) {
                         HStack {
@@ -53,6 +58,8 @@ struct SessionSetupView: View {
                     }
                 }
                 Button("参加者を追加") { showAddPlayer = true }
+            } header: {
+                Text("当日参加者")
             }
 
             Section {

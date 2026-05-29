@@ -9,7 +9,7 @@ struct PlayerFormView: View {
     var player: Player?
 
     @State private var name = ""
-    @State private var level: PlayerLevel = .beginner
+    @State private var level: PlayerLevel = .experienced
     @State private var errorMessage: String?
 
     var body: some View {

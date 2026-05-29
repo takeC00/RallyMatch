@@ -78,11 +78,27 @@ function createTeamElement(ids, playerMap) {
   return team;
 }
 
-function createMatchCard(match, playerMap) {
+function inProgressMatchIds(scheduled, courtCount) {
+  const n = Math.max(1, courtCount ?? 1);
+  return new Set(
+    scheduled
+      .filter((m) => m.status === "scheduled")
+      .sort((a, b) => a.matchNo - b.matchNo)
+      .slice(0, n)
+      .map((m) => m.id)
+  );
+}
+
+function createMatchCard(match, playerMap, inProgressIds) {
   const isDone = match.status === "done";
+  const isPlaying = !isDone && inProgressIds.has(match.id);
 
   const card = document.createElement("article");
-  card.className = isDone ? "match-card match-card--done" : "match-card";
+  card.className = isDone
+    ? "match-card match-card--done"
+    : isPlaying
+      ? "match-card match-card--playing"
+      : "match-card";
 
   const title = document.createElement("h2");
   title.className = "match-title";
@@ -92,6 +108,9 @@ function createMatchCard(match, playerMap) {
   if (isDone) {
     meta.className = "done-badge";
     meta.textContent = "試合済";
+  } else if (isPlaying) {
+    meta.className = "playing-badge";
+    meta.textContent = "試合中";
   } else {
     meta.className = "court";
     meta.textContent = `${match.courtNo}コート`;
@@ -114,7 +133,7 @@ function createMatchCard(match, playerMap) {
   return card;
 }
 
-function renderMatches(matches, playerMap) {
+function renderMatches(matches, playerMap, courtCount = 1) {
   matchesEl.innerHTML = "";
 
   const visible = matches
@@ -130,6 +149,7 @@ function renderMatches(matches, playerMap) {
 
   const done = visible.filter((m) => m.status === "done");
   const scheduled = visible.filter((m) => m.status !== "done");
+  const inProgressIds = inProgressMatchIds(scheduled, courtCount);
 
   if (done.length > 0) {
     const doneLabel = document.createElement("p");
@@ -138,7 +158,7 @@ function renderMatches(matches, playerMap) {
     matchesEl.appendChild(doneLabel);
 
     for (const match of done) {
-      matchesEl.appendChild(createMatchCard(match, playerMap));
+      matchesEl.appendChild(createMatchCard(match, playerMap, inProgressIds));
     }
   }
 
@@ -167,7 +187,7 @@ function renderMatches(matches, playerMap) {
       currentRound = round;
     }
 
-    matchesEl.appendChild(createMatchCard(match, playerMap));
+    matchesEl.appendChild(createMatchCard(match, playerMap, inProgressIds));
   }
 }
 
@@ -240,6 +260,9 @@ async function start() {
 
   statusEl.textContent = "リアルタイム更新中";
 
+  const sessionData = sessionSnap.data();
+  let courtCount = sessionData?.courtCount ?? 1;
+
   const playerMap = new Map();
   let latestMatches = [];
 
@@ -255,7 +278,7 @@ async function start() {
           level: data.level || "beginner",
         });
       });
-      renderMatches(latestMatches, playerMap);
+      renderMatches(latestMatches, playerMap, courtCount);
     },
     (err) => {
       console.error(err);
@@ -282,13 +305,24 @@ async function start() {
           status: data.status ?? "scheduled",
         };
       });
-      renderMatches(latestMatches, playerMap);
+      renderMatches(latestMatches, playerMap, courtCount);
     },
     (err) => {
       console.error(err);
       const message = firestoreErrorMessage(err, "試合情報");
       showError(message, { quota: isQuotaExceeded(err) });
     }
+  );
+
+  onSnapshot(
+    sessionRef,
+    (snap) => {
+      if (snap.exists()) {
+        courtCount = snap.data()?.courtCount ?? courtCount;
+        renderMatches(latestMatches, playerMap, courtCount);
+      }
+    },
+    (err) => console.error(err)
   );
 }
 

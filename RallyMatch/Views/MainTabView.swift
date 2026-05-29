@@ -17,12 +17,10 @@ struct MainTabView: View {
                     Label("試合生成", systemImage: "sportscourt")
                 }
 
-            NavigationStack {
-                SettingsView(showsDismissButtons: false)
-            }
-            .tabItem {
-                Label("設定", systemImage: "gearshape")
-            }
+            SessionCheckTabView()
+                .tabItem {
+                    Label("確認", systemImage: "chart.bar")
+                }
         }
         .environment(sessionStore)
         .task {

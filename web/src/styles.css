@@ -118,6 +118,31 @@ body {
   font-weight: 600;
 }
 
+.match-card--playing {
+  border-color: #fdba74;
+  box-shadow: 0 6px 20px rgba(234, 88, 12, 0.12);
+}
+
+.match-card--playing .court,
+.match-card--playing .vs {
+  color: #ea580c;
+}
+
+.playing-badge {
+  display: inline-block;
+  margin: 0.35rem 0 0.75rem;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #c2410c;
+  background: #ffedd5;
+  border-radius: 999px;
+}
+
+.playing-badge::before {
+  content: "🏸 ";
+}
+
 .done-badge {
   display: inline-block;
   margin: 0.35rem 0 0.75rem;
