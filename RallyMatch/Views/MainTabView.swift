@@ -4,6 +4,9 @@ import SwiftData
 struct MainTabView: View {
     @Bindable private var firebase = FirebaseManager.shared
     @State private var sessionStore = SessionStore()
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+    @Query private var circles: [Circle]
 
     var body: some View {
         TabView {
@@ -25,6 +28,12 @@ struct MainTabView: View {
         .environment(sessionStore)
         .task {
             await firebase.signInAnonymouslyIfNeeded()
+            clearExpiredSessionIfNeeded()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                clearExpiredSessionIfNeeded()
+            }
         }
         .overlay(alignment: .bottom) {
             if let err = firebase.lastError {
@@ -37,6 +46,15 @@ struct MainTabView: View {
                     .padding(.bottom, 56)
                     .padding(.horizontal)
             }
+        }
+    }
+
+    private func clearExpiredSessionIfNeeded() {
+        guard let circleId = sessionStore.expireIfNeeded() else { return }
+        if let circle = circles.first(where: { $0.id == circleId }),
+           circle.activeSessionId != nil {
+            circle.activeSessionId = nil
+            try? modelContext.save()
         }
     }
 }

@@ -6,7 +6,7 @@ struct MatchListView: View {
     @State private var editingMatch: GeneratedMatch?
     @State private var editingPlayerId: UUID?
     @State private var showQR = false
-    @State private var showAddPlayers = false
+    @State private var showAttendanceAdjust = false
 
     private var scheduledRoundGroups: [(round: Int, matches: [GeneratedMatch])] {
         MatchRoundHelper.groupsByStoredRound(from: sessionStore.scheduledMatches)
@@ -67,8 +67,8 @@ struct MatchListView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button("参加者を追加") { showAddPlayers = true }
-                    Button("未実施のみ再生成") { regenerate() }
+                    Button("遅刻 / 早退") { showAttendanceAdjust = true }
+                    Button("再生成") { regenerate() }
                     Button("クラウドに同期") { syncAll() }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -95,8 +95,8 @@ struct MatchListView: View {
                 }
             }
         }
-        .sheet(isPresented: $showAddPlayers) {
-            AddSessionPlayersSheet(sessionStore: sessionStore)
+        .sheet(isPresented: $showAttendanceAdjust) {
+            AttendanceAdjustSheet(sessionStore: sessionStore)
         }
         .overlay {
             if sessionStore.isSyncing {
@@ -192,7 +192,7 @@ struct MatchRowView: View {
                 statusBadge
             }
 
-            HStack(alignment: .center, spacing: 10) {
+            VStack(spacing: 6) {
                 teamBlock(ids: match.team1)
                 Text("VS")
                     .font(.caption.weight(.bold))
@@ -224,7 +224,8 @@ struct MatchRowView: View {
                 .buttonStyle(.plain)
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .multilineTextAlignment(.center)
     }
 
     private func color(for id: UUID) -> Color {

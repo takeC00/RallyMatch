@@ -41,11 +41,6 @@ struct SessionSetupView: View {
     var body: some View {
         Form {
             Section {
-                Text("当日に参加する方は、スイッチをオンにしてください。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 8, trailing: 20))
-
                 ForEach(circlePlayers) { player in
                     Toggle(isOn: binding(for: player.id)) {
                         HStack {

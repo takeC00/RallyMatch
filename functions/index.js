@@ -5,14 +5,14 @@ const { logger } = require("firebase-functions");
 admin.initializeApp();
 
 /**
- * Deletes expired sessions daily at 05:00 JST.
+ * Deletes expired sessions daily at 04:00 JST.
  * - sessions/{sessionId}
  *   - matches/*
  *   - sessionPlayers/*
  */
 exports.deleteExpiredSessions = onSchedule(
   {
-    schedule: "0 5 * * *",
+    schedule: "0 4 * * *",
     timeZone: "Asia/Tokyo",
     retryCount: 3,
   },

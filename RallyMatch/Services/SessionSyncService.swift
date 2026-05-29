@@ -37,9 +37,15 @@ final class SessionSyncService {
         try await replaceMatches(matches, sessionId: sessionId, onlyScheduled: false)
     }
 
-    func uploadPlayers(_ players: [SessionPlayer], sessionId: String) async throws {
+    func syncPlayers(_ players: [SessionPlayer], sessionId: String) async throws {
         let col = db.collection("sessions").document(sessionId).collection("sessionPlayers")
+        let snap = try await col.getDocuments()
+        let activeIds = Set(players.map { $0.id.uuidString })
+
         let batch = db.batch()
+        for doc in snap.documents where !activeIds.contains(doc.documentID) {
+            batch.deleteDocument(doc.reference)
+        }
         for p in players {
             let ref = col.document(p.id.uuidString)
             batch.setData([
@@ -48,6 +54,10 @@ final class SessionSyncService {
             ], forDocument: ref)
         }
         try await batch.commit()
+    }
+
+    func uploadPlayers(_ players: [SessionPlayer], sessionId: String) async throws {
+        try await syncPlayers(players, sessionId: sessionId)
     }
 
     func replaceMatches(

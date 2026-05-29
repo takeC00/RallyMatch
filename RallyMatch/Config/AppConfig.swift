@@ -10,14 +10,14 @@ enum AppConfig {
         URL(string: "\(hostingBaseURL)/session/\(sessionId)")
     }
 
-    /// 翌日 5:00 JST
+    /// 翌日 4:00 JST（Cloud Functions の自動削除時刻と一致）
     static func defaultExpiresAt(from date: Date = .now) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Tokyo")!
 
         let startOfToday = calendar.startOfDay(for: date)
         guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday),
-              let expires = calendar.date(bySettingHour: 5, minute: 0, second: 0, of: tomorrow)
+              let expires = calendar.date(bySettingHour: 4, minute: 0, second: 0, of: tomorrow)
         else {
             return date.addingTimeInterval(86400)
         }

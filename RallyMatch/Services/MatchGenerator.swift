@@ -112,17 +112,56 @@ struct MatchGenerator {
         mode: GenerationMode,
         matchPerPlayer: Int,
         courtCount: Int,
-        doneMatches: [GeneratedMatch]
+        lockedMatches: [GeneratedMatch]
     ) -> [GeneratedMatch] {
-        let done = doneMatches.filter { $0.status == .done }.sorted { $0.matchNo < $1.matchNo }
-        let nextNo = (done.map(\.matchNo).max() ?? 0) + 1
-        return generate(
-            players: players,
-            mode: mode,
-            matchPerPlayer: matchPerPlayer,
-            courtCount: courtCount,
-            existingDone: done,
-            startingMatchNo: nextNo
+        let locked = lockedMatches
+            .filter { $0.status != .cancelled }
+            .sorted { $0.matchNo < $1.matchNo }
+
+        guard players.count >= 4 else { return locked }
+
+        let target = max(1, matchPerPlayer)
+        let nextNo = (locked.map(\.matchNo).max() ?? 0) + 1
+        let randomness = GenerationRandomness(players: players)
+        var states = buildInitialStates(players: players.shuffled(), existingDone: locked)
+        var history = History()
+        for m in locked {
+            recordMatch(m, into: &history)
+        }
+
+        var result = locked
+        var matchIndex = 0
+        let maxRounds = players.count * target + players.count
+
+        while states.contains(where: { $0.matchCount < target }), matchIndex < maxRounds {
+            let matchNo = nextNo + matchIndex
+            guard let picked = pickMatch(
+                states: states,
+                mode: mode,
+                matchIndex: matchNo,
+                history: history,
+                target: target,
+                randomness: randomness
+            ) else {
+                break
+            }
+
+            let courtNo = ((matchNo - 1) % max(1, courtCount)) + 1
+            let match = GeneratedMatch(
+                matchNo: matchNo,
+                courtNo: courtNo,
+                team1: picked.team1,
+                team2: picked.team2
+            )
+            result.append(match)
+            applyMatch(match, states: &states, matchIndex: matchNo)
+            recordMatch(match, into: &history)
+            matchIndex += 1
+        }
+
+        return MatchRoundHelper.assignRounds(
+            to: result.sorted { $0.matchNo < $1.matchNo },
+            playerIds: players.map(\.id)
         )
     }
 

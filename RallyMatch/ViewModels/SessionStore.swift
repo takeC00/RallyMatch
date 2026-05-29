@@ -15,6 +15,8 @@ final class SessionStore {
     var errorMessage: String?
     var isQuotaLimited = false
     var showParticipationSummary = false
+    /// クラウド上の有効期限（翌日 4:00 JST）。自動削除と同期。
+    var expiresAt: Date?
 
     var participationRows: [PlayerParticipation] {
         ParticipationStats.counts(players: players, matches: matches)
@@ -44,6 +46,19 @@ final class SessionStore {
         errorMessage = nil
         isQuotaLimited = false
         showParticipationSummary = false
+        expiresAt = nil
+    }
+
+    /// 有効期限を過ぎていればローカル状態をクリア。クリアしたサークル ID を返す。
+    @discardableResult
+    func expireIfNeeded() -> UUID? {
+        guard sessionId != nil,
+              let expiresAt,
+              Date.now >= expiresAt
+        else { return nil }
+        let circleId = self.circleId
+        reset()
+        return circleId
     }
 
     func reportSyncError(_ error: Error, context: String? = nil) {
@@ -75,15 +90,56 @@ final class SessionStore {
         )
     }
 
-    func regenerateScheduled() {
+    /// 試合済・試合中を維持し、それ以降の未実施のみ再生成
+    private var lockedMatchesForRegeneration: [GeneratedMatch] {
         let done = doneMatches
+        let inProgress = MatchProgressHelper.inProgressMatches(
+            scheduled: scheduledMatches,
+            courtCount: courtCount
+        )
+        return (done + inProgress).sorted { $0.matchNo < $1.matchNo }
+    }
+
+    func regenerateScheduled() {
         matches = MatchGenerator.regenerateScheduled(
             players: players,
             mode: mode,
             matchPerPlayer: matchPerPlayer,
             courtCount: courtCount,
-            doneMatches: done
+            lockedMatches: lockedMatchesForRegeneration
         )
+    }
+
+    func isPlayerInProgress(_ playerId: UUID) -> Bool {
+        inProgressMatchIds.contains { matchId in
+            matches.first(where: { $0.id == matchId })?.playerIds.contains(playerId) == true
+        }
+    }
+
+    /// 遅刻（参加）・早退（不参加）。成功時 `nil`、失敗時はエラーメッセージ。
+    @discardableResult
+    func setPlayerParticipating(_ player: SessionPlayer, active: Bool) -> String? {
+        if active {
+            guard !players.contains(where: { $0.id == player.id }) else { return nil }
+            players.append(player)
+        } else {
+            if isPlayerInProgress(player.id) {
+                return "試合中のため退場できません"
+            }
+            players.removeAll { $0.id == player.id }
+        }
+
+        guard players.count >= 4 else {
+            if active {
+                players.removeAll { $0.id == player.id }
+            } else {
+                players.append(player)
+            }
+            return "参加者は4名以上必要です"
+        }
+
+        regenerateScheduled()
+        return nil
     }
 
     func markDone(upTo matchNo: Int) {
@@ -171,6 +227,7 @@ final class SessionStore {
 
         let id = sessionId ?? UUID().uuidString.lowercased()
         sessionId = id
+        expiresAt = AppConfig.defaultExpiresAt()
 
         try await SessionSyncService.shared.createSession(
             sessionId: id,

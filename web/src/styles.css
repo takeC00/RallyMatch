@@ -156,11 +156,10 @@ body {
 
 .teams-row {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
+  gap: 0.45rem;
 }
 
 .team {
@@ -174,8 +173,7 @@ body {
   font-weight: 600;
   line-height: 1.35;
   text-align: center;
-  flex: 1 1 auto;
-  min-width: 0;
+  width: 100%;
 }
 
 .player.beginner {
@@ -194,10 +192,11 @@ body {
 
 .vs {
   flex-shrink: 0;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--accent);
-  padding: 0 0.15rem;
+  padding: 0.1rem 0;
+  letter-spacing: 0.08em;
 }
 
 .empty,

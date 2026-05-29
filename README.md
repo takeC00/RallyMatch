@@ -66,7 +66,7 @@ iOS **設定** の URL も同じ値にしてください。
 https://{hosting-domain}/session/{sessionId}
 ```
 
-セッションは **翌日 5:00 (JST)** に Cloud Functions で自動削除されます。
+セッションは **翌日 4:00 (JST)** に Cloud Functions で自動削除されます。
 
 ## セキュリティ
 
