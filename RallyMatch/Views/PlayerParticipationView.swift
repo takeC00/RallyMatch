@@ -5,7 +5,7 @@ struct PlayerParticipationView: View {
 
     private var rows: [PlayerParticipation] {
         ParticipationStats.counts(
-            players: sessionStore.players,
+            players: sessionStore.allKnownPlayers,
             matches: sessionStore.matches
         )
     }

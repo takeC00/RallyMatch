@@ -7,6 +7,8 @@ final class SessionStore {
     var sessionId: String?
     var circleId: UUID?
     var players: [SessionPlayer] = []
+    /// 早退した参加者（試合履歴の名前表示用。再生成には含めない）
+    var departedPlayers: [SessionPlayer] = []
     var matches: [GeneratedMatch] = []
     var mode: GenerationMode = .mix
     var courtCount: Int = 2
@@ -21,7 +23,12 @@ final class SessionStore {
     var expiresAt: Date?
 
     var participationRows: [PlayerParticipation] {
-        ParticipationStats.counts(players: players, matches: matches)
+        ParticipationStats.counts(players: allKnownPlayers, matches: matches)
+    }
+
+    /// 参加中＋早退者（試合履歴の表示・集計用）
+    var allKnownPlayers: [SessionPlayer] {
+        players + departedPlayers
     }
 
     var scheduledMatches: [GeneratedMatch] {
@@ -44,6 +51,7 @@ final class SessionStore {
         sessionId = nil
         circleId = nil
         players = []
+        departedPlayers = []
         matches = []
         errorMessage = nil
         isQuotaLimited = false
@@ -125,6 +133,7 @@ final class SessionStore {
     @discardableResult
     func setPlayerParticipating(_ player: SessionPlayer, active: Bool) -> String? {
         if active {
+            departedPlayers.removeAll { $0.id == player.id }
             guard !players.contains(where: { $0.id == player.id }) else { return nil }
             players.append(player)
         } else {
@@ -132,13 +141,20 @@ final class SessionStore {
                 return "試合中のため退場できません"
             }
             players.removeAll { $0.id == player.id }
+            if !departedPlayers.contains(where: { $0.id == player.id }) {
+                departedPlayers.append(player)
+            }
         }
 
         guard players.count >= 4 else {
             if active {
                 players.removeAll { $0.id == player.id }
+                departedPlayers.removeAll { $0.id == player.id }
             } else {
-                players.append(player)
+                departedPlayers.removeAll { $0.id == player.id }
+                if !players.contains(where: { $0.id == player.id }) {
+                    players.append(player)
+                }
             }
             return "参加者は4名以上必要です"
         }
@@ -218,11 +234,15 @@ final class SessionStore {
     }
 
     func playerName(for id: UUID) -> String {
-        players.first { $0.id == id }?.name ?? "不明"
+        playerSnapshot(for: id)?.name ?? "不明"
     }
 
     func playerLevel(for id: UUID) -> PlayerLevel {
-        players.first { $0.id == id }?.level ?? .beginner
+        playerSnapshot(for: id)?.level ?? .beginner
+    }
+
+    func playerSnapshot(for id: UUID) -> SessionPlayer? {
+        players.first { $0.id == id } ?? departedPlayers.first { $0.id == id }
     }
 
     func syncCreate(ownerUid: String) async throws {

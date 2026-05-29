@@ -50,31 +50,62 @@ final class SessionSyncService {
             "updatedAt": now,
         ])
 
-        try await uploadPlayers(players, sessionId: sessionId)
+        try await syncSessionRoster(
+            activePlayers: players,
+            departedPlayers: [],
+            sessionId: sessionId
+        )
         try await replaceMatches(matches, sessionId: sessionId, onlyScheduled: false)
     }
 
-    func syncPlayers(_ players: [SessionPlayer], sessionId: String) async throws {
+    func syncSessionRoster(
+        activePlayers: [SessionPlayer],
+        departedPlayers: [SessionPlayer],
+        sessionId: String
+    ) async throws {
         let col = db.collection("sessions").document(sessionId).collection("sessionPlayers")
         let snap = try await col.getDocuments()
-        let activeIds = Set(players.map { $0.id.uuidString })
+        let knownIds = Set(
+            activePlayers.map(\.id.uuidString) + departedPlayers.map(\.id.uuidString)
+        )
 
         let batch = db.batch()
-        for doc in snap.documents where !activeIds.contains(doc.documentID) {
+        for doc in snap.documents where !knownIds.contains(doc.documentID) {
             batch.deleteDocument(doc.reference)
         }
-        for p in players {
+        for p in activePlayers {
             let ref = col.document(p.id.uuidString)
             batch.setData([
                 "name": p.name,
                 "level": p.level.rawValue,
+                "active": true,
+            ], forDocument: ref)
+        }
+        for p in departedPlayers {
+            let ref = col.document(p.id.uuidString)
+            batch.setData([
+                "name": p.name,
+                "level": p.level.rawValue,
+                "active": false,
             ], forDocument: ref)
         }
         try await batch.commit()
     }
 
+    func syncPlayers(_ players: [SessionPlayer], sessionId: String) async throws {
+        try await syncSessionRoster(
+            activePlayers: players,
+            departedPlayers: [],
+            sessionId: sessionId
+        )
+    }
+
     func uploadPlayers(_ players: [SessionPlayer], sessionId: String) async throws {
-        try await syncPlayers(players, sessionId: sessionId)
+        try await syncSessionRoster(
+            activePlayers: players,
+            departedPlayers: [],
+            sessionId: sessionId
+        )
     }
 
     func replaceMatches(

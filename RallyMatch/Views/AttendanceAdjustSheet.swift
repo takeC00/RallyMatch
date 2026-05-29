@@ -29,7 +29,7 @@ struct AttendanceAdjustSheet: View {
                 } header: {
                     Text("参加")
                 } footer: {
-                    Text("オン＝参加、オフ＝早退。試合中の選手はオフにできません。変更後、試合済・試合中以外の試合が再生成されます。")
+                    Text("オン＝参加、オフ＝早退。試合中の選手はオフにできません。早退後も試合済・試合中の名前は残り、それ以降の試合からは除外されます。")
                 }
             }
             .navigationTitle("遅刻 / 早退")
@@ -92,7 +92,11 @@ struct AttendanceAdjustSheet: View {
         isSyncing = true
         defer { isSyncing = false }
         do {
-            try await SessionSyncService.shared.syncPlayers(sessionStore.players, sessionId: sessionId)
+            try await SessionSyncService.shared.syncSessionRoster(
+                activePlayers: sessionStore.players,
+                departedPlayers: sessionStore.departedPlayers,
+                sessionId: sessionId
+            )
             try await sessionStore.syncMatches()
             sessionStore.clearSyncError()
         } catch {

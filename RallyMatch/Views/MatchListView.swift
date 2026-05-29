@@ -390,7 +390,7 @@ struct PairCombinationView: View {
 
     private var rows: [TeammatePair] {
         MatchListPairStats.teammatePairCounts(
-            players: sessionStore.players,
+            players: sessionStore.allKnownPlayers,
             matches: sessionStore.matches
         )
     }
