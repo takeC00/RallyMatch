@@ -77,6 +77,16 @@ struct SessionSetupView: View {
                 GenerationConditionsSectionHeader(showHelp: $showGenerationHelp)
             }
 
+            if let err = sessionStore.errorMessage {
+                Section {
+                    Text(err)
+                        .font(.subheadline)
+                        .foregroundStyle(sessionStore.isQuotaLimited ? .orange : .red)
+                } header: {
+                    Text(sessionStore.isQuotaLimited ? "クラウド連携を一時停止中" : "エラー")
+                }
+            }
+
             Section {
                 Button {
                     Task { await prepareAndGenerate() }
@@ -107,6 +117,9 @@ struct SessionSetupView: View {
         }
         .onAppear {
             sessionStore.circleId = circle.id
+            if sessionStore.matches.isEmpty {
+                _ = sessionStore.expireIfNeeded()
+            }
             if selectedIds.isEmpty {
                 selectedIds = Set(circlePlayers.map(\.id))
             }
@@ -132,7 +145,11 @@ struct SessionSetupView: View {
 
     private func prepareAndGenerate() async {
         isGenerating = true
-        defer { isGenerating = false }
+        sessionStore.isCreatingSession = true
+        defer {
+            isGenerating = false
+            sessionStore.isCreatingSession = false
+        }
 
         await firebase.signInAnonymouslyIfNeeded()
         guard firebase.uid != nil else {
@@ -140,17 +157,28 @@ struct SessionSetupView: View {
             return
         }
 
+        sessionStore.clearSyncError()
         sessionStore.players = circlePlayers
             .filter { selectedIds.contains($0.id) }
             .map(SessionPlayer.init(from:))
         sessionStore.circleId = circle.id
         sessionStore.sessionId = UUID().uuidString.lowercased()
+        sessionStore.expiresAt = AppConfig.defaultExpiresAt()
         sessionStore.generateMatches()
+
+        guard !sessionStore.matches.isEmpty else {
+            sessionStore.errorMessage = "試合を生成できませんでした。参加者が4名以上いるか確認してください。"
+            return
+        }
 
         guard let uid = firebase.uid else { return }
         do {
             if let previousId = circle.activeSessionId, previousId != sessionStore.sessionId {
-                try await SessionSyncService.shared.deleteSession(sessionId: previousId)
+                do {
+                    try await SessionSyncService.shared.deleteSession(sessionId: previousId)
+                } catch {
+                    // 自動削除済み・権限なしなどは新規作成を妨げない
+                }
             }
             try await sessionStore.syncCreate(ownerUid: uid)
             circle.activeSessionId = sessionStore.sessionId

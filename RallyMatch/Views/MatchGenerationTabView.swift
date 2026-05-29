@@ -86,6 +86,18 @@ struct MatchGenerationTabView: View {
                         }
                 }
             }
+            .onAppear {
+                clearExpiredSessionIfNeeded()
+            }
+        }
+    }
+
+    private func clearExpiredSessionIfNeeded() {
+        guard let circleId = sessionStore.expireIfNeeded() else { return }
+        if let circle = circles.first(where: { $0.id == circleId }),
+           circle.activeSessionId != nil {
+            circle.activeSessionId = nil
+            try? modelContext.save()
         }
     }
 

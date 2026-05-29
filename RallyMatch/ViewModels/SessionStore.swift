@@ -12,6 +12,8 @@ final class SessionStore {
     var courtCount: Int = 2
     var matchPerPlayer: Int = 3
     var isSyncing = false
+    /// 試合生成・クラウド作成中（期限切れクリアを抑止）
+    var isCreatingSession = false
     var errorMessage: String?
     var isQuotaLimited = false
     var showParticipationSummary = false
@@ -47,12 +49,15 @@ final class SessionStore {
         isQuotaLimited = false
         showParticipationSummary = false
         expiresAt = nil
+        isCreatingSession = false
     }
 
     /// 有効期限を過ぎていればローカル状態をクリア。クリアしたサークル ID を返す。
     @discardableResult
     func expireIfNeeded() -> UUID? {
-        guard sessionId != nil,
+        guard !isCreatingSession,
+              !isSyncing,
+              sessionId != nil,
               let expiresAt,
               Date.now >= expiresAt
         else { return nil }
@@ -221,13 +226,23 @@ final class SessionStore {
     }
 
     func syncCreate(ownerUid: String) async throws {
-        guard let circleId, !players.isEmpty else { return }
+        guard let circleId else {
+            throw SessionSyncError.missingCircle
+        }
+        guard !players.isEmpty else {
+            throw SessionSyncError.missingPlayers
+        }
+        guard !matches.isEmpty else {
+            throw SessionSyncError.missingMatches
+        }
         isSyncing = true
         defer { isSyncing = false }
 
         let id = sessionId ?? UUID().uuidString.lowercased()
         sessionId = id
-        expiresAt = AppConfig.defaultExpiresAt()
+        if expiresAt == nil {
+            expiresAt = AppConfig.defaultExpiresAt()
+        }
 
         try await SessionSyncService.shared.createSession(
             sessionId: id,

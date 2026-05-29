@@ -1,6 +1,23 @@
 import Foundation
 import FirebaseFirestore
 
+enum SessionSyncError: LocalizedError {
+    case missingCircle
+    case missingPlayers
+    case missingMatches
+
+    var errorDescription: String? {
+        switch self {
+        case .missingCircle:
+            "サークルが選択されていません"
+        case .missingPlayers:
+            "参加者が選択されていません"
+        case .missingMatches:
+            "試合が生成されていません。もう一度お試しください"
+        }
+    }
+}
+
 @MainActor
 final class SessionSyncService {
     static let shared = SessionSyncService()
