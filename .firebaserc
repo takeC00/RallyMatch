@@ -1,6 +1,5 @@
 {
   "projects": {
-    "default": "YOUR_FIREBASE_PROJECT_ID"
+    "default": "rallymatch-e6014"
   }
 }
-

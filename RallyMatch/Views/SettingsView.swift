@@ -42,7 +42,11 @@ struct SettingsView: View {
             } header: {
                 Text("参加者用 URL（Firebase Hosting）")
             } footer: {
-                Text("QRコードは {URL}/session/{sessionId} 形式で生成されます")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("QRコードは {URL}/session/{sessionId} 形式で生成されます")
+                    Text("推奨: \(AppFirebaseConfig.defaultHostingURL)")
+                        .font(.caption)
+                }
             }
         }
         .navigationTitle("設定")

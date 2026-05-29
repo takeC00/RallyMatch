@@ -1,5 +1,5 @@
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
-import { db } from "./firebase.js";
+import { collection, doc, getDoc, onSnapshot, orderBy, query } from "firebase/firestore";
+import { initFirebase } from "./firebase.js";
 
 const matchesEl = document.getElementById("matches");
 const statusEl = document.getElementById("status");
@@ -18,11 +18,35 @@ function showError(message) {
   errorEl.textContent = message;
   errorEl.classList.remove("hidden");
   statusEl.textContent = "";
+  emptyEl.classList.add("hidden");
 }
 
-function formatTeam(playerMap, ids) {
-  if (!ids?.length) return "—";
-  return ids.map((id) => playerMap.get(id) || "不明").join("・");
+function createTeamElement(ids, playerMap) {
+  const team = document.createElement("div");
+  team.className = "team";
+
+  if (!ids?.length) {
+    team.textContent = "—";
+    return team;
+  }
+
+  ids.forEach((id, index) => {
+    const info = playerMap.get(id);
+    const span = document.createElement("span");
+    const level = info?.level ?? "beginner";
+    span.className = `player ${level === "experienced" ? "experienced" : "beginner"}`;
+    span.textContent = info?.name ?? "不明";
+    team.appendChild(span);
+
+    if (index < ids.length - 1) {
+      const sep = document.createElement("span");
+      sep.className = "sep";
+      sep.textContent = "・";
+      team.appendChild(sep);
+    }
+  });
+
+  return team;
 }
 
 function renderMatches(matches, playerMap) {
@@ -49,32 +73,68 @@ function renderMatches(matches, playerMap) {
     court.className = "court";
     court.textContent = `${match.courtNo}コート`;
 
-    const teams = document.createElement("div");
-    teams.className = "teams";
+    const teamsRow = document.createElement("div");
+    teamsRow.className = "teams-row";
 
-    const team1 = document.createElement("p");
-    team1.className = "team";
-    team1.textContent = formatTeam(playerMap, match.team1);
-
-    const vs = document.createElement("p");
+    const vs = document.createElement("span");
     vs.className = "vs";
     vs.textContent = "VS";
 
-    const team2 = document.createElement("p");
-    team2.className = "team";
-    team2.textContent = formatTeam(playerMap, match.team2);
+    teamsRow.append(
+      createTeamElement(match.team1, playerMap),
+      vs,
+      createTeamElement(match.team2, playerMap)
+    );
 
-    teams.append(team1, vs, team2);
-    card.append(title, court, teams);
+    card.append(title, court, teamsRow);
     matchesEl.appendChild(card);
   }
 }
 
-const sessionId = parseSessionId();
+function firestoreErrorMessage(err, context) {
+  const code = err?.code ?? "";
+  if (code === "not-found" || code === "permission-denied") {
+    return (
+      `${context}を取得できません。\n` +
+      "・試合がまだクラウドに保存されていない\n" +
+      "・QR の URL（Hosting）と iOS の Firebase プロジェクトが一致していない\n" +
+      "・Hosting / Firestore が未デプロイ\n" +
+      "管理者に「firebase deploy」の実行を依頼してください。"
+    );
+  }
+  if (code === "failed-precondition") {
+    return "Firestore インデックスが未作成です。firebase deploy --only firestore:indexes を実行してください。";
+  }
+  return `${context}の取得に失敗しました: ${err?.message ?? "不明なエラー"}`;
+}
 
-if (!sessionId) {
-  showError("セッションIDが見つかりません。QRコードから再度アクセスしてください。");
-} else {
+async function start() {
+  const sessionId = parseSessionId();
+
+  if (!sessionId) {
+    showError("セッションIDが見つかりません。QRコードから再度アクセスしてください。");
+    return;
+  }
+
+  let db;
+  try {
+    db = await initFirebase();
+  } catch (e) {
+    showError(e.message ?? "Firebase の初期化に失敗しました。");
+    return;
+  }
+
+  const sessionRef = doc(db, "sessions", sessionId);
+  const sessionSnap = await getDoc(sessionRef);
+  if (!sessionSnap.exists()) {
+    showError(
+      `セッション「${sessionId}」が見つかりません。\n` +
+        "・試合生成後に iOS で同期エラーが出ていないか確認\n" +
+        "・QR の URL が https://rallymatch-e6014.web.app になっているか確認（設定タブ）"
+    );
+    return;
+  }
+
   statusEl.textContent = "リアルタイム更新中";
 
   const playerMap = new Map();
@@ -85,15 +145,18 @@ if (!sessionId) {
     playersRef,
     (snap) => {
       playerMap.clear();
-      snap.forEach((doc) => {
-        const data = doc.data();
-        playerMap.set(doc.id, data.name || "不明");
+      snap.forEach((d) => {
+        const data = d.data();
+        playerMap.set(d.id, {
+          name: data.name || "不明",
+          level: data.level || "beginner",
+        });
       });
       renderMatches(latestMatches, playerMap);
     },
     (err) => {
       console.error(err);
-      showError("参加者情報の取得に失敗しました。");
+      showError(firestoreErrorMessage(err, "参加者情報"));
     }
   );
 
@@ -103,10 +166,10 @@ if (!sessionId) {
   onSnapshot(
     matchesQuery,
     (snap) => {
-      latestMatches = snap.docs.map((doc) => {
-        const data = doc.data();
+      latestMatches = snap.docs.map((d) => {
+        const data = d.data();
         return {
-          id: doc.id,
+          id: d.id,
           matchNo: data.matchNo ?? 0,
           courtNo: data.courtNo ?? 1,
           team1: data.team1 ?? [],
@@ -118,11 +181,9 @@ if (!sessionId) {
     },
     (err) => {
       console.error(err);
-      if (err.code === "failed-precondition") {
-        showError("インデックスが未設定です。Firebase Consoleで matches の matchNo インデックスを作成してください。");
-      } else {
-        showError("試合情報の取得に失敗しました。");
-      }
+      showError(firestoreErrorMessage(err, "試合情報"));
     }
   );
 }
+
+start();

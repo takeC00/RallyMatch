@@ -7,8 +7,11 @@ enum AppConfig {
     /// 例: https://your-project.web.app
     static var hostingBaseURL: String {
         get {
-            UserDefaults.standard.string(forKey: hostingURLKey)
-                ?? "https://YOUR_PROJECT.web.app"
+            let saved = UserDefaults.standard.string(forKey: hostingURLKey)
+            if let saved, !saved.isEmpty, !saved.contains("YOUR_PROJECT") {
+                return saved
+            }
+            return AppFirebaseConfig.defaultHostingURL
         }
         set {
             var trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)

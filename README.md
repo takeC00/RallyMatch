@@ -22,9 +22,12 @@
    - Xcode で RallyMatch ターゲットに含まれていることを確認（フォルダ同期のため通常は自動）
 5. Web アプリを登録し、設定値を `web/.env` にコピー（`web/.env.example` 参照）
 
-`.firebaserc` の `YOUR_FIREBASE_PROJECT_ID` を実際のプロジェクト ID に変更してください。
+### 2. Web アプリを Firebase に登録（重要）
 
-### 2. Web（参加者向け）
+1. Firebase Console → プロジェクト設定 → **アプリを追加** → **Web**
+2. 表示された `appId` を `web/.env` の `VITE_FIREBASE_APP_ID` に設定
+
+### 3. Web（参加者向け）ビルド
 
 ```bash
 cd web
@@ -34,17 +37,19 @@ npm install
 npm run build
 ```
 
-### 3. デプロイ
+### 4. デプロイ（必須・QR が動くために必要）
 
 ```bash
-# ルートで
+cd web && npm install && npm run build && cd ..
 cd functions && npm install && cd ..
+firebase login
 firebase deploy
 ```
 
-Hosting URL が QR のベース URL になります（例: `https://your-project.web.app`）。
+Hosting URL（QR用）: `https://rallymatch-e6014.web.app`  
+iOS **設定** の URL も同じ値にしてください。
 
-### 4. iOS
+### 5. iOS
 
 1. Xcode で `RallyMatch.xcodeproj` を開く
 2. **File → Add Package Dependencies** で `https://github.com/firebase/firebase-ios-sdk` を追加
@@ -68,6 +73,16 @@ https://{hosting-domain}/session/{sessionId}
 - 参加者: Firestore **読み取りのみ**（ルールで公開 read）
 - 主催者: 匿名 Auth でログインし、`ownerUid` が一致するセッションのみ書き込み可
 - `sessionId` を知っている人は閲覧可能（設計上許容）
+
+## QR を読んでも NotFound になる場合
+
+| 確認項目 | 対処 |
+|---------|------|
+| Hosting 未デプロイ | `firebase deploy` を実行 |
+| iOS の URL が `YOUR_PROJECT.web.app` | 設定で `https://rallymatch-e6014.web.app` に変更 |
+| Web アプリ未登録 | Firebase Console で Web アプリを追加し `.env` に appId を設定 |
+| 試合生成時に同期エラー | iOS で Firebase 接続を確認し、再生成 |
+| Firestore にセッションが無い | [Firebase Console](https://console.firebase.google.com/) → Firestore → `sessions` を確認 |
 
 ## ローカル開発
 

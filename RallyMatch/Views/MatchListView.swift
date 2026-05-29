@@ -151,28 +151,42 @@ struct MatchRowView: View {
                     .clipShape(Capsule())
             }
 
-            teamRow(ids: match.team1)
-            Text("VS")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-            teamRow(ids: match.team2)
+            HStack(alignment: .center, spacing: 10) {
+                teamBlock(ids: match.team1)
+                Text("VS")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                teamBlock(ids: match.team2)
+            }
+            .frame(maxWidth: .infinity)
         }
         .padding(.vertical, 4)
         .opacity(match.status == .cancelled ? 0.4 : 1)
     }
 
     @ViewBuilder
-    private func teamRow(ids: [UUID]) -> some View {
-        HStack {
-            ForEach(ids, id: \.self) { id in
-                Button(sessionStore.playerName(for: id)) {
+    private func teamBlock(ids: [UUID]) -> some View {
+        HStack(spacing: 2) {
+            ForEach(Array(ids.enumerated()), id: \.element) { index, id in
+                if index > 0 {
+                    Text("・")
+                        .foregroundStyle(.secondary)
+                        .font(.subheadline)
+                }
+                Button {
                     if match.status == .scheduled { onTapPlayer(id) }
+                } label: {
+                    Text(sessionStore.playerName(for: id))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(color(for: id))
                 }
                 .buttonStyle(.plain)
-                if id != ids.last { Text("・") }
             }
         }
-        .font(.subheadline.weight(.semibold))
+        .frame(maxWidth: .infinity)
+    }
+
+    private func color(for id: UUID) -> Color {
+        sessionStore.playerLevel(for: id) == .experienced ? .red : .blue
     }
 }

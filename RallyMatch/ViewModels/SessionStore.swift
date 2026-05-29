@@ -119,6 +119,10 @@ final class SessionStore {
         players.first { $0.id == id }?.name ?? "不明"
     }
 
+    func playerLevel(for id: UUID) -> PlayerLevel {
+        players.first { $0.id == id }?.level ?? .beginner
+    }
+
     func syncCreate(ownerUid: String) async throws {
         guard let circleId, !players.isEmpty else { return }
         isSyncing = true
