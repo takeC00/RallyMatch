@@ -316,11 +316,9 @@ final class SessionStore {
         isSyncing = true
         defer { isSyncing = false }
 
-        let id = sessionId ?? UUID().uuidString.lowercased()
+        let id = AppConfig.stableSessionId(for: ownerUid)
         sessionId = id
-        if expiresAt == nil {
-            expiresAt = AppConfig.defaultExpiresAt()
-        }
+        expiresAt = AppConfig.defaultExpiresAt()
 
         try await SessionSyncService.shared.createSession(
             sessionId: id,

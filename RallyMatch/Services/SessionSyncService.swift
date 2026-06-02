@@ -36,25 +36,33 @@ final class SessionSyncService {
         matches: [GeneratedMatch]
     ) async throws {
         let sessionRef = db.collection("sessions").document(sessionId)
+        let existing = try await sessionRef.getDocument()
         let now = Timestamp(date: .now)
         let expiresAt = Timestamp(date: AppConfig.defaultExpiresAt())
 
-        try await sessionRef.setData([
+        var sessionData: [String: Any] = [
             "circleId": circleId.uuidString,
             "mode": mode.rawValue,
             "courtCount": courtCount,
             "matchPerPlayer": matchPerPlayer,
             "ownerUid": ownerUid,
             "expiresAt": expiresAt,
-            "createdAt": now,
             "updatedAt": now,
-        ])
+        ]
+        if existing.exists, let createdAt = existing.data()?["createdAt"] {
+            sessionData["createdAt"] = createdAt
+        } else {
+            sessionData["createdAt"] = now
+        }
+
+        try await sessionRef.setData(sessionData)
 
         try await syncSessionRoster(
             activePlayers: players,
             departedPlayers: [],
             sessionId: sessionId
         )
+        try await deleteAllDocuments(in: sessionRef.collection("matches"))
         try await replaceMatches(matches, sessionId: sessionId, onlyScheduled: false)
     }
 

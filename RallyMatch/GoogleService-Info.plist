@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyCYnfKuUJU7aMDv7ojzHnsPHoicYtSAIIQ</string>
+	<string>AIzaSyDg5W2NuI25cvS-T_D8RI_Is_2DpsKfH2Q</string>
 	<key>GCM_SENDER_ID</key>
-	<string>761119860407</string>
+	<string>412253376233</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.take.RallyMatch</string>
 	<key>PROJECT_ID</key>
-	<string>rallymatch-e6014</string>
+	<string>rallyos</string>
 	<key>STORAGE_BUCKET</key>
-	<string>rallymatch-e6014.firebasestorage.app</string>
+	<string>rallyos.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:761119860407:ios:fc632724f59a72c0f08f32</string>
+	<string>1:412253376233:ios:c76dd8ca14cda6d9aeaa78</string>
 </dict>
 </plist>

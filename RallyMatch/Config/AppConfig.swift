@@ -10,6 +10,11 @@ enum AppConfig {
         URL(string: "\(hostingBaseURL)/session/\(sessionId)")
     }
 
+    /// 端末（Firebase 匿名 UID）ごとに固定のセッション ID。QR URL は再生成しても変わらない。
+    static func stableSessionId(for ownerUid: String) -> String {
+        ownerUid
+    }
+
     /// 翌日 4:00 JST（Cloud Functions の自動削除時刻と一致）
     static func defaultExpiresAt(from date: Date = .now) -> Date {
         var calendar = Calendar(identifier: .gregorian)

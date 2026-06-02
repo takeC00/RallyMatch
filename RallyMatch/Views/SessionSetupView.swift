@@ -3,7 +3,7 @@ import SwiftData
 
 struct SessionSetupView: View {
     let circle: Circle
-    @Bindable var sessionStore: SessionStore
+    var sessionStore: SessionStore
 
     @Environment(\.modelContext) private var modelContext
     @Query private var allPlayers: [Player]
@@ -39,6 +39,8 @@ struct SessionSetupView: View {
     }
 
     var body: some View {
+        @Bindable var store = sessionStore
+
         Form {
             Section {
                 ForEach(circlePlayers) { player in
@@ -58,19 +60,19 @@ struct SessionSetupView: View {
             }
 
             Section {
-                Picker("生成モード", selection: $sessionStore.mode) {
+                Picker("生成モード", selection: $store.mode) {
                     ForEach(GenerationMode.allCases) { m in
                         Text(m.label).tag(m)
                     }
                 }
                 BlueValueStepperRow(
                     title: "1人あたり試合数",
-                    value: $sessionStore.matchPerPlayer,
+                    value: $store.matchPerPlayer,
                     range: 1...20
                 )
                 BlueValueStepperRow(
                     title: "コート数",
-                    value: $sessionStore.courtCount,
+                    value: $store.courtCount,
                     range: 1...20
                 )
             } header: {

@@ -63,8 +63,10 @@ iOS **設定** の URL も同じ値にしてください。
 参加者は次の URL で試合一覧を閲覧します（ログイン不要）。
 
 ```
-https://{hosting-domain}/session/{sessionId}
+https://{hosting-domain}/session/{端末ID}
 ```
+
+端末 ID は Firebase 匿名認証の UID で、**1端末1URL** です。試合を再生成しても URL は変わりません。
 
 セッションは **翌日 4:00 (JST)** に Cloud Functions で自動削除されます。
 
