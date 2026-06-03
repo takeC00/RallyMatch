@@ -10,9 +10,9 @@ enum AppConfig {
         URL(string: "\(hostingBaseURL)/session/\(sessionId)")
     }
 
-    /// 端末（Firebase 匿名 UID）ごとに固定のセッション ID。QR URL は再生成しても変わらない。
-    static func stableSessionId(for ownerUid: String) -> String {
-        ownerUid
+    /// サークルごとに固定のセッション ID。同一サークルで試合を再生成しても QR URL は変わらない。
+    static func stableSessionId(for circleId: UUID) -> String {
+        circleId.uuidString.lowercased()
     }
 
     /// 翌日 4:00 JST（Cloud Functions の自動削除時刻と一致）

@@ -214,9 +214,16 @@ function renderMatches(matches, playerMap, courtCount = 1) {
 }
 
 const QUOTA_EXCEEDED_MESSAGE =
-  "Firebase の利用上限に達したため、一時的に試合一覧を表示できません。\n" +
-  "しばらく時間をおくか、翌日になってから再度アクセスしてください。\n" +
-  "主催者は Firebase Console の「使用状況」をご確認ください。";
+  "アクセスが集中しているため、一時的に試合一覧を表示できません。\n" +
+  "しばらく時間をおくか、翌日になってから再度お試しください。";
+
+const USER_MESSAGES = {
+  invalidQR: "QRコードからアクセスしてください。",
+  notGeneratedToday:
+    "本日の試合生成が行われていません。\n主催者に試合の作成を確認してください。",
+  loadFailed: "試合一覧を表示できませんでした。しばらく待ってから再度お試しください。",
+  initFailed: "ページの読み込みに失敗しました。しばらく待ってから再度お試しください。",
+};
 
 function isQuotaExceeded(err) {
   const code = err?.code ?? "";
@@ -225,31 +232,25 @@ function isQuotaExceeded(err) {
   return text.includes("quota") || text.includes("resource exhausted");
 }
 
-function firestoreErrorMessage(err, context) {
+function firestoreErrorMessage(err) {
   if (isQuotaExceeded(err)) {
     return QUOTA_EXCEEDED_MESSAGE;
   }
   const code = err?.code ?? "";
   if (code === "not-found" || code === "permission-denied") {
-    return (
-      `${context}を取得できません。\n` +
-      "・試合がまだクラウドに保存されていない\n" +
-      "・QR の URL（Hosting）と iOS の Firebase プロジェクトが一致していない\n" +
-      "・Hosting / Firestore が未デプロイ\n" +
-      "管理者に「firebase deploy」の実行を依頼してください。"
-    );
+    return USER_MESSAGES.notGeneratedToday;
   }
   if (code === "failed-precondition") {
-    return "Firestore インデックスが未作成です。firebase deploy --only firestore:indexes を実行してください。";
+    return USER_MESSAGES.loadFailed;
   }
-  return `${context}の取得に失敗しました: ${err?.message ?? "不明なエラー"}`;
+  return USER_MESSAGES.loadFailed;
 }
 
 async function start() {
   const sessionId = parseSessionId();
 
   if (!sessionId) {
-    showError("セッションIDが見つかりません。QRコードから再度アクセスしてください。");
+    showError(USER_MESSAGES.invalidQR);
     return;
   }
 
@@ -257,7 +258,8 @@ async function start() {
   try {
     db = await initFirebase();
   } catch (e) {
-    showError(e.message ?? "Firebase の初期化に失敗しました。");
+    console.error(e);
+    showError(USER_MESSAGES.initFailed);
     return;
   }
 
@@ -267,16 +269,12 @@ async function start() {
     sessionSnap = await getDoc(sessionRef);
   } catch (err) {
     console.error(err);
-    const message = firestoreErrorMessage(err, "セッション");
+    const message = firestoreErrorMessage(err);
     showError(message, { quota: isQuotaExceeded(err) });
     return;
   }
   if (!sessionSnap.exists()) {
-    showError(
-      `セッション「${sessionId}」が見つかりません。\n` +
-        "・試合生成後に iOS で同期エラーが出ていないか確認\n" +
-        "・QR の URL が https://rallymatch-e6014.web.app になっているか確認（設定タブ）"
-    );
+    showError(USER_MESSAGES.notGeneratedToday);
     return;
   }
 
@@ -304,7 +302,7 @@ async function start() {
     },
     (err) => {
       console.error(err);
-      const message = firestoreErrorMessage(err, "参加者情報");
+      const message = firestoreErrorMessage(err);
       showError(message, { quota: isQuotaExceeded(err) });
     }
   );
@@ -332,7 +330,7 @@ async function start() {
     },
     (err) => {
       console.error(err);
-      const message = firestoreErrorMessage(err, "試合情報");
+      const message = firestoreErrorMessage(err);
       showError(message, { quota: isQuotaExceeded(err) });
     }
   );

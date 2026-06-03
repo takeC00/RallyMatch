@@ -28,7 +28,6 @@ struct MainTabView: View {
         .environment(sessionStore)
         .task {
             clearExpiredSessionIfNeeded()
-            await firebase.signInAnonymouslyIfNeeded()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {

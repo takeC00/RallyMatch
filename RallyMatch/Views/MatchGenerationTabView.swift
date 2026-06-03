@@ -14,8 +14,6 @@ struct MatchGenerationTabView: View {
     }
 
     var body: some View {
-        @Bindable var store = sessionStore
-
         NavigationStack {
             Group {
                 if hasActiveSession {
@@ -66,19 +64,7 @@ struct MatchGenerationTabView: View {
                 }
                 Button("キャンセル", role: .cancel) {}
             } message: {
-                Text("進行中の試合はクラウドからも削除され、元に戻せません。参加者用のQRも無効になります。")
-            }
-            .sheet(isPresented: $store.showParticipationSummary) {
-                NavigationStack {
-                    PlayerParticipationView(sessionStore: sessionStore)
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("閉じる") {
-                                    store.showParticipationSummary = false
-                                }
-                            }
-                        }
-                }
+                Text("進行中の試合はクラウドからも削除され、元に戻せません。他サークルの QR や試合データには影響しません。")
             }
             .onAppear {
                 clearExpiredSessionIfNeeded()

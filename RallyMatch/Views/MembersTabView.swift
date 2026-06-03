@@ -35,6 +35,15 @@ struct MembersTabView: View {
             }
             .navigationTitle("メンバー登録")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("設定")
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         CircleFormView()

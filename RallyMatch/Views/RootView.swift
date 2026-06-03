@@ -6,7 +6,7 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            MainTabView()
+            ContentView()
 
             if showSplash {
                 SplashOverlayView(isPresented: $showSplash)
@@ -15,5 +15,9 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 1.5), value: showSplash)
+        .task {
+            FirebaseManager.shared.startAuthListener()
+            FirebaseManager.shared.bootstrapSession()
+        }
     }
 }

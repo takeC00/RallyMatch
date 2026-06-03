@@ -32,9 +32,7 @@ export async function initFirebase() {
   const config = envConfig ?? (await configFromHosting());
 
   if (!config?.projectId || !config?.apiKey) {
-    throw new Error(
-      "Firebase の Web 設定がありません。web/.env を設定するか、firebase deploy で Hosting にデプロイしてください。"
-    );
+    throw new Error("Firebase configuration is missing.");
   }
 
   const app = initializeApp(config);

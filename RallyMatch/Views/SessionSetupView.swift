@@ -18,22 +18,45 @@ struct SessionSetupView: View {
         allPlayers.filter { $0.circleId == circle.id }.sorted { $0.name < $1.name }
     }
 
+    private var selectedPlayers: [SessionPlayer] {
+        circlePlayers
+            .filter { selectedIds.contains($0.id) }
+            .map(SessionPlayer.init(from:))
+    }
+
+    private var generationIssues: [GenerationValidation.Issue] {
+        GenerationValidation.validate(
+            players: selectedPlayers,
+            mode: sessionStore.mode,
+            matchPerPlayer: sessionStore.matchPerPlayer,
+            courtCount: sessionStore.courtCount
+        )
+    }
+
+    private var hasBlockingGenerationIssue: Bool {
+        generationIssues.contains { $0.severity == .blocking }
+    }
+
     private var canGenerate: Bool {
-        selectedIds.count >= 4 && !isGenerating
+        selectedIds.count >= 4
+            && !isGenerating
+            && !hasBlockingGenerationIssue
+            && firebase.isPlistConfigured
+            && firebase.isLoggedIn
     }
 
     private var statusMessage: String {
         if selectedIds.count < 4 {
             return "当日参加者を4名以上選択してください（現在 \(selectedIds.count) 名）"
         }
+        if let blocking = generationIssues.first(where: { $0.severity == .blocking }) {
+            return blocking.message
+        }
         if !firebase.isPlistConfigured {
             return "GoogleService-Info.plist が未設定です（Firebase の設定を確認）"
         }
-        if firebase.uid == nil {
-            if let err = firebase.lastError {
-                return "Firebase 未接続: \(err)"
-            }
-            return "Firebase に接続中…"
+        if !firebase.isLoggedIn {
+            return "ログインしてください（RallyMate と同じアカウントで利用できます）"
         }
         return "試合を生成してクラウドに保存します"
     }
@@ -79,6 +102,22 @@ struct SessionSetupView: View {
                 GenerationConditionsSectionHeader(showHelp: $showGenerationHelp)
             }
 
+            if !generationIssues.isEmpty {
+                Section {
+                    ForEach(generationIssues) { issue in
+                        Label {
+                            Text(issue.message)
+                                .font(.subheadline)
+                        } icon: {
+                            Image(systemName: issue.severity == .blocking ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
+                        }
+                        .foregroundStyle(issue.severity == .blocking ? .red : .orange)
+                    }
+                } header: {
+                    Text("生成前の確認")
+                }
+            }
+
             if let err = sessionStore.errorMessage {
                 Section {
                     Text(err)
@@ -105,7 +144,11 @@ struct SessionSetupView: View {
                 .disabled(!canGenerate)
             } footer: {
                 Text(statusMessage)
-                    .foregroundStyle(canGenerate ? Color.secondary : Color.orange)
+                    .foregroundStyle(
+                        canGenerate
+                        ? Color.secondary
+                        : (hasBlockingGenerationIssue ? Color.red : Color.orange)
+                    )
             }
         }
         .navigationTitle("試合設定")
@@ -131,9 +174,6 @@ struct SessionSetupView: View {
                 selectedIds = Set(circlePlayers.map(\.id))
             }
         }
-        .task {
-            await firebase.signInAnonymouslyIfNeeded()
-        }
     }
 
     private func binding(for id: UUID) -> Binding<Bool> {
@@ -153,9 +193,8 @@ struct SessionSetupView: View {
             sessionStore.isCreatingSession = false
         }
 
-        await firebase.signInAnonymouslyIfNeeded()
-        guard firebase.uid != nil else {
-            sessionStore.errorMessage = firebase.lastError ?? "Firebase に接続できません。匿名ログインが有効か確認してください。"
+        guard firebase.isLoggedIn, firebase.uid != nil else {
+            sessionStore.errorMessage = "ログインしてください。"
             return
         }
 
@@ -164,7 +203,7 @@ struct SessionSetupView: View {
             .filter { selectedIds.contains($0.id) }
             .map(SessionPlayer.init(from:))
         sessionStore.circleId = circle.id
-        sessionStore.sessionId = UUID().uuidString.lowercased()
+        sessionStore.sessionId = AppConfig.stableSessionId(for: circle.id)
         sessionStore.expiresAt = AppConfig.defaultExpiresAt()
         sessionStore.generateMatches()
 
@@ -175,7 +214,9 @@ struct SessionSetupView: View {
 
         guard let uid = firebase.uid else { return }
         do {
-            if let previousId = circle.activeSessionId, previousId != sessionStore.sessionId {
+            // 旧仕様（主催者 UID を sessionId にしていた時代）の孤立セッションを掃除
+            if let previousId = circle.activeSessionId,
+               previousId != sessionStore.sessionId {
                 do {
                     try await SessionSyncService.shared.deleteSession(sessionId: previousId)
                 } catch {
@@ -186,7 +227,6 @@ struct SessionSetupView: View {
             circle.activeSessionId = sessionStore.sessionId
             try modelContext.save()
             sessionStore.errorMessage = nil
-            sessionStore.showParticipationSummary = true
             dismiss()
         } catch {
             sessionStore.reportSyncError(error)

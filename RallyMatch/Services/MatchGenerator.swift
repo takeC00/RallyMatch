@@ -199,6 +199,10 @@ struct MatchGenerator {
         var tiedBest: [(team1: [UUID], team2: [UUID])] = []
 
         for quartet in combinations(pool, choose: 4) {
+            if mode == .separated, !isSameLevelQuartet(quartet, states: states) {
+                continue
+            }
+
             for (t1, t2) in teamSplits(for: quartet) {
                 let score = scoreMatch(
                     team1: t1,
@@ -268,6 +272,15 @@ struct MatchGenerator {
             ids.append(s.player.id)
         }
         return ids
+    }
+
+    private static func isSameLevelQuartet(_ ids: [UUID], states: [PlayerState]) -> Bool {
+        let levels = Set(
+            ids.map { id in
+                states.first { $0.player.id == id }?.player.level ?? .beginner
+            }
+        )
+        return levels.count == 1
     }
 
     private static func teamSplits(for ids: [UUID]) -> [([UUID], [UUID])] {

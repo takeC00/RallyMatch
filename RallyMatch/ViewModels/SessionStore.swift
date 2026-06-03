@@ -18,7 +18,6 @@ final class SessionStore {
     var isCreatingSession = false
     var errorMessage: String?
     var isQuotaLimited = false
-    var showParticipationSummary = false
     /// クラウド上の有効期限（翌日 4:00 JST）。自動削除と同期。
     var expiresAt: Date?
 
@@ -55,7 +54,6 @@ final class SessionStore {
         matches = []
         errorMessage = nil
         isQuotaLimited = false
-        showParticipationSummary = false
         expiresAt = nil
         isCreatingSession = false
     }
@@ -316,7 +314,7 @@ final class SessionStore {
         isSyncing = true
         defer { isSyncing = false }
 
-        let id = AppConfig.stableSessionId(for: ownerUid)
+        let id = AppConfig.stableSessionId(for: circleId)
         sessionId = id
         expiresAt = AppConfig.defaultExpiresAt()
 

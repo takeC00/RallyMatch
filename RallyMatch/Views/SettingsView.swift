@@ -13,6 +13,15 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
+                if firebase.isLoggedIn {
+                    if !firebase.currentUserName.isEmpty {
+                        LabeledContent("表示名", value: firebase.currentUserName)
+                    }
+                    if let email = firebase.currentUserEmail {
+                        LabeledContent("メール", value: email)
+                    }
+                }
+
                 Label(
                     firebase.isPlistConfigured ? "設定済み" : "未設定",
                     systemImage: firebase.isPlistConfigured ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
@@ -23,10 +32,6 @@ struct SettingsView: View {
                     Text("Firebase Console から GoogleService-Info.plist をダウンロードし、RallyMatch/ フォルダに配置してから再ビルドしてください。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                } else if !firebase.isReady {
-                    Button("Firebase に再接続") {
-                        Task { await firebase.signInAnonymouslyIfNeeded() }
-                    }
                 }
 
                 if let err = firebase.lastError {
@@ -35,7 +40,15 @@ struct SettingsView: View {
                         .foregroundStyle(.red)
                 }
             } header: {
-                Text("Firebase")
+                Text("アカウント / Firebase")
+            }
+
+            if firebase.isLoggedIn {
+                Section {
+                    Button("ログアウト", role: .destructive) {
+                        firebase.logout()
+                    }
+                }
             }
 
             Section {
@@ -48,7 +61,7 @@ struct SettingsView: View {
             } header: {
                 Text("QRコード")
             } footer: {
-                Text("QRコードは {URL}/session/{sessionId} 形式で生成されます。URLは Firebase プロジェクトから自動設定されます。")
+                Text("QRコードは {URL}/session/{サークルID} 形式で生成されます。サークルごとに URL が異なり、同一サークル内では再生成しても変わりません。")
             }
         }
         .navigationTitle("設定")
