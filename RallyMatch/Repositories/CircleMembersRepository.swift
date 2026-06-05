@@ -60,18 +60,25 @@ final class CircleMembersRepository {
                 circleId: circleId,
                 userId: member.userId
             )
+            let ref = db.collection("circleRoster").document(documentId)
+            let existing = try await ref.getDocument()
 
-            try await db.collection("circleRoster")
-                .document(documentId)
-                .setData([
-                    "circleId": circleId,
-                    "playerId": playerId.uuidString.lowercased(),
-                    "name": member.userName,
-                    "level": PlayerLevel.experienced.rawValue,
-                    "userId": member.userId,
-                    "createdAt": Timestamp(date: member.joinedAt),
-                    "updatedAt": now,
-                ], merge: true)
+            var data: [String: Any] = [
+                "circleId": circleId,
+                "playerId": playerId.uuidString.lowercased(),
+                "name": member.userName,
+                "userId": member.userId,
+                "updatedAt": now,
+            ]
+
+            if existing.exists {
+                // 名前などは同期するが、level は Match 側で設定した値を維持
+            } else {
+                data["level"] = PlayerLevel.experienced.rawValue
+                data["createdAt"] = Timestamp(date: member.joinedAt)
+            }
+
+            try await ref.setData(data, merge: true)
         }
 
         await CircleRosterRepository.shared.refresh(circleId: circleId)

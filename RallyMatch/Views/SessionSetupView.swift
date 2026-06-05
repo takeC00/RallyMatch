@@ -11,6 +11,7 @@ struct SessionSetupView: View {
     @State private var showAddPlayer = false
     @State private var isGenerating = false
     @State private var showGenerationHelp = false
+    @State private var showVisitorHelp = false
 
     private var circlePlayers: [RosterPlayer] {
         roster.players(for: circle.id)
@@ -75,9 +76,9 @@ struct SessionSetupView: View {
                         }
                     }
                 }
-                Button("参加者を追加") { showAddPlayer = true }
+                Button("Visitor追加") { showAddPlayer = true }
             } header: {
-                Text("当日参加者")
+                VisitorSectionHeader(showHelp: $showVisitorHelp, title: "当日参加者")
             }
 
             Section {
@@ -152,6 +153,9 @@ struct SessionSetupView: View {
         .navigationTitle("試合設定")
         .navigationDestination(isPresented: $showGenerationHelp) {
             GenerationSettingsHelpView()
+        }
+        .navigationDestination(isPresented: $showVisitorHelp) {
+            VisitorHelpView()
         }
         .sheet(isPresented: $showAddPlayer) {
             NavigationStack {

@@ -7,12 +7,36 @@ struct CircleDetailView: View {
     @Bindable private var roster = CircleRosterRepository.shared
     @Bindable private var membersRepo = CircleMembersRepository.shared
 
+    @State private var showVisitorHelp = false
+    @State private var visitorPendingDelete: RosterPlayer?
+    @State private var showDeleteVisitorConfirm = false
+
     private var accountMembers: [CloudCircleMember] {
         membersRepo.members(for: circle.id)
     }
 
+    private var linkedAccountPlayers: [RosterPlayer] {
+        roster.players(for: circle.id).filter(\.isLinkedAccount)
+    }
+
     private var guestPlayers: [RosterPlayer] {
         roster.players(for: circle.id).filter { !$0.isLinkedAccount }
+    }
+
+    private struct AccountMemberRow: Identifiable {
+        let member: CloudCircleMember
+        let player: RosterPlayer?
+
+        var id: String { member.id }
+    }
+
+    private var accountMemberRows: [AccountMemberRow] {
+        accountMembers.map { member in
+            AccountMemberRow(
+                member: member,
+                player: roster.linkedPlayer(circleId: circle.id, userId: member.userId)
+            )
+        }
     }
 
     private var isLoading: Bool {
@@ -30,31 +54,47 @@ struct CircleDetailView: View {
                 ContentUnavailableView(
                     "参加者がいません",
                     systemImage: "person.crop.circle.badge.plus",
-                    description: Text("招待コードで参加するか、ゲスト参加者を追加してください")
+                    description: Text("招待コードで参加するか、Visitor を追加してください")
                 )
             } else {
                 List {
-                    if !accountMembers.isEmpty {
+                    if !accountMemberRows.isEmpty {
                         Section {
-                            ForEach(accountMembers) { member in
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(member.userName)
-                                            .font(.headline)
-                                        Text(roleLabel(member.role))
+                            ForEach(accountMemberRows) { row in
+                                NavigationLink {
+                                    MemberLevelEditView(
+                                        circle: circle,
+                                        member: row.member,
+                                        existingPlayer: row.player
+                                    )
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(row.member.userName)
+                                                .font(.headline)
+                                                .foregroundStyle(levelColor(row.player?.level ?? .experienced))
+                                            Text(roleLabel(row.member.role))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Spacer()
+                                        Text((row.player?.level ?? .experienced).label)
                                             .font(.caption)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(levelBadgeColor(row.player?.level ?? .experienced).opacity(0.15))
+                                            .foregroundStyle(levelColor(row.player?.level ?? .experienced))
+                                            .clipShape(Capsule())
+                                        Text("\(row.member.rating)")
+                                            .font(.subheadline.monospacedDigit())
                                             .foregroundStyle(.secondary)
                                     }
-                                    Spacer()
-                                    Text("\(member.rating)")
-                                        .font(.subheadline.monospacedDigit())
-                                        .foregroundStyle(.secondary)
                                 }
                             }
                         } header: {
                             Text("アカウントメンバー")
                         } footer: {
-                            Text("RallyMate・RallyHub で参加したメンバーです。試合生成にも利用できます。")
+                            Text("タップして経験者・初心者を編集できます。試合生成の組み合わせに反映されます。")
                         }
                     }
 
@@ -63,21 +103,41 @@ struct CircleDetailView: View {
                             NavigationLink {
                                 PlayerFormView(circle: circle, player: player)
                             } label: {
-                                HStack {
-                                    Text(player.name)
-                                        .foregroundStyle(levelColor(player.level))
-                                    Spacer()
-                                    Text(player.level.label)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(player.name)
+                                            .foregroundStyle(levelColor(player.level))
+                                        Spacer()
+                                        Text(player.level.label)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Text("登録: \(VisitorExpiry.registrationDayLabel(for: player.createdAt))")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    visitorPendingDelete = player
+                                    showDeleteVisitorConfirm = true
+                                } label: {
+                                    Label("削除", systemImage: "trash")
+                                }
+                            }
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    visitorPendingDelete = player
+                                    showDeleteVisitorConfirm = true
+                                } label: {
+                                    Label("削除", systemImage: "trash")
                                 }
                             }
                         }
-                        .onDelete(perform: deleteGuestPlayers)
                     } header: {
-                        Text("ゲスト参加者")
+                        VisitorSectionHeader(showHelp: $showVisitorHelp, title: "Visitor")
                     } footer: {
-                        Text("アカウント未登録の参加者用です。Mate のランキングには表示されません。")
+                        Text("アカウント未登録の参加者です。日本時間で日付が変わると、次回 Match を開いたときに自動で削除されます。左スワイプまたは長押しで手動削除もできます。")
                     }
 
                     Section("サークル情報") {
@@ -99,7 +159,7 @@ struct CircleDetailView: View {
                 } label: {
                     Image(systemName: "person.badge.plus")
                 }
-                .accessibilityLabel("ゲスト参加者を追加")
+                .accessibilityLabel("Visitor追加")
             }
 
             ToolbarItem(placement: .topBarLeading) {
@@ -110,6 +170,23 @@ struct CircleDetailView: View {
                 }
                 .accessibilityLabel("サークル設定")
             }
+        }
+        .navigationDestination(isPresented: $showVisitorHelp) {
+            VisitorHelpView()
+        }
+        .confirmationDialog(
+            "Visitorを削除しますか？",
+            isPresented: $showDeleteVisitorConfirm,
+            presenting: visitorPendingDelete
+        ) { player in
+            Button("削除", role: .destructive) {
+                Task { await deleteVisitor(player) }
+            }
+            Button("キャンセル", role: .cancel) {
+                visitorPendingDelete = nil
+            }
+        } message: { player in
+            Text("「\(player.name)」を削除します。この操作は取り消せません。")
         }
         .refreshable {
             await reload()
@@ -136,12 +213,16 @@ struct CircleDetailView: View {
         level == .experienced ? .red : .blue
     }
 
-    private func deleteGuestPlayers(at offsets: IndexSet) {
-        Task {
-            for index in offsets {
-                let player = guestPlayers[index]
-                try? await roster.deletePlayer(player)
-            }
+    private func levelBadgeColor(_ level: PlayerLevel) -> Color {
+        level == .experienced ? .red : .blue
+    }
+
+    private func deleteVisitor(_ player: RosterPlayer) async {
+        do {
+            try await roster.deleteVisitor(player)
+            visitorPendingDelete = nil
+        } catch {
+            roster.lastError = error.localizedDescription
         }
     }
 }
