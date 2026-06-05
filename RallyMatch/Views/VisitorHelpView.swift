@@ -17,7 +17,7 @@ struct VisitorHelpView: View {
                 )
                 helpRow(
                     title: "Visitor",
-                    detail: "Match だけに登録する名前のみの参加者。試合の組み合わせ生成に使います。RallyMate のランキングには反映されません。",
+                    detail: "Match だけに登録する名前のみの参加者。試合の組み合わせ生成に使います。RallyMate で試合結果を登録する場合も選択でき、レート計算では 1500 固定（Visitor 自身のレートは変動しません）。",
                     systemImage: "person.crop.circle.badge.plus"
                 )
             }
@@ -37,6 +37,12 @@ struct VisitorHelpView: View {
                 Label("サークル詳細 → Visitor を左スワイプ", systemImage: "trash")
                 Label("Visitor 編集画面の「Visitorを削除」", systemImage: "minus.circle")
                 helpText("アカウントメンバーは削除できません。Visitor のみ対象です。")
+            }
+
+            Section("RallyMate との連携") {
+                helpText("RallyMate で試合結果を入力するとき、当日の Visitor もメンバーと同様に選択できます。")
+                helpText("レート計算では Visitor は常に 1500 として扱われ、Visitor 本人のレートは増減しません。アカウントメンバーのみレートが変動します。")
+                helpText("Visitor は翌日以降に Match 起動時などで名簿から削除されます。削除後も試合履歴では参加者名が「Visitor」と表示されます。")
             }
 
             Section("試合生成での使い方") {
