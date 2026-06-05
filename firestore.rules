@@ -48,6 +48,21 @@ service cloud.firestore {
       );
     }
 
+    function isCircleOwner(circleId) {
+      return isSignedIn()
+        && circleDoc(circleId).data.ownerId == request.auth.uid;
+    }
+
+    function sessionCircleId(sessionId) {
+      return get(/databases/$(database)/documents/sessions/$(sessionId)).data.circleId;
+    }
+
+    function canDeleteSession(sessionId) {
+      return isSessionOwner(sessionId)
+        || (sessionCircleId(sessionId) != null
+          && isCircleOwner(sessionCircleId(sessionId)));
+    }
+
     // 招待コード参加: まだ memberIds に含まれない本人だけが自分を追加できる
     function isSelfJoiningCircle() {
       return isSignedIn()
@@ -69,16 +84,19 @@ service cloud.firestore {
       allow list: if false;
       allow create: if isSignedIn()
         && request.resource.data.ownerUid == request.auth.uid;
-      allow update, delete: if isSessionOwner(sessionId);
+      allow update: if isSessionOwner(sessionId);
+      allow delete: if canDeleteSession(sessionId);
 
       match /matches/{matchId} {
         allow get, list: if true;
-        allow create, update, delete: if isSessionOwner(sessionId);
+        allow create, update: if isSessionOwner(sessionId);
+        allow delete: if canDeleteSession(sessionId);
       }
 
       match /sessionPlayers/{playerId} {
         allow get, list: if true;
-        allow create, update, delete: if isSessionOwner(sessionId);
+        allow create, update: if isSessionOwner(sessionId);
+        allow delete: if canDeleteSession(sessionId);
       }
     }
 
@@ -151,7 +169,9 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid
         && isCircleMember(request.resource.data.circleId);
       allow delete: if isSignedIn()
-        && resource.data.userId == request.auth.uid;
+        && (resource.data.userId == request.auth.uid
+          || (resource.data.circleId != null
+            && isCircleOwner(resource.data.circleId)));
     }
 
     match /eventVisitors/{visitorId} {

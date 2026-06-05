@@ -3,6 +3,7 @@ import SwiftUI
 struct CircleDetailView: View {
     let circle: CloudCircle
 
+    @Environment(\.dismiss) private var dismiss
     @Bindable private var roster = CircleRosterRepository.shared
 
     private var players: [RosterPlayer] {
@@ -57,6 +58,15 @@ struct CircleDetailView: View {
                 } label: {
                     Image(systemName: "person.badge.plus")
                 }
+            }
+
+            ToolbarItem(placement: .topBarLeading) {
+                NavigationLink {
+                    CircleSettingsView(circle: circle, onDeleted: { dismiss() })
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel("サークル設定")
             }
         }
         .refreshable {

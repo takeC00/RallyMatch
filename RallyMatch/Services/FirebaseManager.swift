@@ -312,6 +312,38 @@ final class FirebaseManager {
         }
     }
 
+    func deleteCircle(_ circle: CloudCircle) async throws {
+        guard configureIfNeeded() else { throw Self.configurationError }
+        guard let uid else {
+            throw NSError(
+                domain: "",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "ログイン情報が取得できません"]
+            )
+        }
+        guard circle.ownerId == uid else {
+            throw NSError(
+                domain: "",
+                code: -4,
+                userInfo: [NSLocalizedDescriptionKey: "サークルのオーナーのみ削除できます"]
+            )
+        }
+
+        try await CircleDeletionService.deleteCircle(circleId: circle.id, ownerId: uid)
+
+        CircleSessionPreferences.setActiveSessionId(nil, for: circle.id)
+
+        if currentCircleId == circle.id {
+            currentCircleId = nil
+        }
+        joinedCircles.removeAll { $0.id == circle.id }
+        await refreshCircles()
+    }
+
+    func isCircleOwner(_ circle: CloudCircle) -> Bool {
+        uid == circle.ownerId
+    }
+
     func setCurrentCircle(_ circleId: String) async throws {
         guard configureIfNeeded(), let uid else {
             throw Self.configurationError
