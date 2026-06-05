@@ -307,6 +307,11 @@ final class FirebaseManager {
                       !joinedCircles.contains(where: { $0.id == currentCircleId }) {
                 self.currentCircleId = joinedCircles.first?.id
             }
+
+            let circleIds = joinedCircles.map(\.id)
+            await CircleMembersRepository.shared.refreshAll(circleIds: circleIds)
+            await CircleMembersRepository.shared.syncAllJoinedCircles(circleIds)
+            await CircleRosterRepository.shared.refreshAll(circleIds: circleIds)
         } catch {
             lastError = error.localizedDescription
         }

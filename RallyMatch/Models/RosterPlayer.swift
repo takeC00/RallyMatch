@@ -9,19 +9,60 @@ struct RosterPlayer: Identifiable, Hashable, Sendable {
     let name: String
     let level: PlayerLevel
     let createdAt: Date
+    /// アカウント連携済みメンバー（`circleMembers.userId`）
+    let linkedUserId: String?
+
+    var isLinkedAccount: Bool { linkedUserId != nil }
 
     static func documentId(circleId: String, playerId: UUID) -> String {
         "\(circleId)_\(playerId.uuidString.lowercased())"
     }
 
+    static func linkedDocumentId(circleId: String, userId: String) -> String {
+        PlayerIdentity.linkedRosterDocumentId(circleId: circleId, userId: userId)
+    }
+
+    init(
+        id: String,
+        playerId: UUID,
+        circleId: String,
+        name: String,
+        level: PlayerLevel,
+        createdAt: Date,
+        linkedUserId: String? = nil
+    ) {
+        self.id = id
+        self.playerId = playerId
+        self.circleId = circleId
+        self.name = name
+        self.level = level
+        self.createdAt = createdAt
+        self.linkedUserId = linkedUserId
+    }
+
+    init(from member: CloudCircleMember) {
+        let playerId = PlayerIdentity.stablePlayerId(userId: member.userId)
+        self.id = Self.linkedDocumentId(circleId: member.circleId, userId: member.userId)
+        self.playerId = playerId
+        self.circleId = member.circleId
+        self.name = member.userName
+        self.level = .experienced
+        self.createdAt = member.joinedAt
+        self.linkedUserId = member.userId
+    }
+
     func toDictionary() -> [String: Any] {
-        [
+        var data: [String: Any] = [
             "circleId": circleId,
             "playerId": playerId.uuidString.lowercased(),
             "name": name,
             "level": level.rawValue,
-            "createdAt": Timestamp(date: createdAt)
+            "createdAt": Timestamp(date: createdAt),
         ]
+        if let linkedUserId {
+            data["userId"] = linkedUserId
+        }
+        return data
     }
 
     static func from(_ document: DocumentSnapshot) -> RosterPlayer? {
@@ -38,6 +79,7 @@ struct RosterPlayer: Identifiable, Hashable, Sendable {
             ?? UUID()
 
         let createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+        let linkedUserId = data["userId"] as? String
 
         return RosterPlayer(
             id: document.documentID,
@@ -45,7 +87,8 @@ struct RosterPlayer: Identifiable, Hashable, Sendable {
             circleId: circleId,
             name: name,
             level: level,
-            createdAt: createdAt
+            createdAt: createdAt,
+            linkedUserId: linkedUserId
         )
     }
 }

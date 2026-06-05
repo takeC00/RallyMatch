@@ -3,6 +3,7 @@ import SwiftUI
 struct MembersTabView: View {
     @Bindable private var firebase = FirebaseManager.shared
     @Bindable private var roster = CircleRosterRepository.shared
+    @Bindable private var membersRepo = CircleMembersRepository.shared
 
     var body: some View {
         NavigationStack {
@@ -34,7 +35,7 @@ struct MembersTabView: View {
                                             .clipShape(Capsule())
                                     }
                                 }
-                                Text("\(roster.players(for: circle.id).count) 名登録")
+                                Text("\(membersRepo.members(for: circle.id).count) 名（アカウント）")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 if !circle.sportName.isEmpty {
@@ -83,18 +84,22 @@ struct MembersTabView: View {
                 }
             }
             .refreshable {
-                await firebase.refreshCircles()
-                await roster.refreshAll(circleIds: firebase.joinedCircles.map(\.id))
+                await reloadMembers()
             }
             .task {
-                await firebase.refreshCircles()
-                await roster.refreshAll(circleIds: firebase.joinedCircles.map(\.id))
+                await reloadMembers()
             }
-            .onChange(of: firebase.joinedCircles.map(\.id)) { _, circleIds in
-                Task {
-                    await roster.refreshAll(circleIds: circleIds)
-                }
+            .onChange(of: firebase.joinedCircles.map(\.id)) { _, _ in
+                Task { await reloadMembers() }
             }
         }
+    }
+
+    private func reloadMembers() async {
+        await firebase.refreshCircles()
+        let circleIds = firebase.joinedCircles.map(\.id)
+        await membersRepo.refreshAll(circleIds: circleIds)
+        await membersRepo.syncAllJoinedCircles(circleIds)
+        await roster.refreshAll(circleIds: circleIds)
     }
 }

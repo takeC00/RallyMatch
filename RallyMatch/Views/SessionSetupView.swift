@@ -159,6 +159,8 @@ struct SessionSetupView: View {
             }
         }
         .task {
+            await CircleMembersRepository.shared.refresh(circleId: circle.id)
+            try? await CircleMembersRepository.shared.syncMembersToRoster(circleId: circle.id)
             await roster.refresh(circleId: circle.id)
         }
         .onAppear {

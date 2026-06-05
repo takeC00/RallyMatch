@@ -52,7 +52,11 @@ final class CircleRosterRepository {
         }
 
         let existing = players(for: circleId)
-        if existing.contains(where: { $0.name == trimmed }) {
+        let memberNames = CircleMembersRepository.shared
+            .members(for: circleId)
+            .map(\.userName)
+        if existing.contains(where: { $0.name == trimmed })
+            || memberNames.contains(trimmed) {
             throw RosterError.duplicateName
         }
 

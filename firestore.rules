@@ -202,7 +202,9 @@ service cloud.firestore {
         && request.resource.data.circleId is string
         && request.resource.data.name is string
         && request.resource.data.playerId is string
-        && request.resource.data.level is string;
+        && request.resource.data.level is string
+        && (!('userId' in request.resource.data)
+          || request.resource.data.userId is string);
       allow update, delete: if isSignedIn()
         && isCircleMember(resource.data.circleId);
     }

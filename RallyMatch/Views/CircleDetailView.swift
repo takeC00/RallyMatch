@@ -5,25 +5,61 @@ struct CircleDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Bindable private var roster = CircleRosterRepository.shared
+    @Bindable private var membersRepo = CircleMembersRepository.shared
 
-    private var players: [RosterPlayer] {
-        roster.players(for: circle.id)
+    private var accountMembers: [CloudCircleMember] {
+        membersRepo.members(for: circle.id)
+    }
+
+    private var guestPlayers: [RosterPlayer] {
+        roster.players(for: circle.id).filter { !$0.isLinkedAccount }
+    }
+
+    private var isLoading: Bool {
+        (roster.isLoadingCircleIds.contains(circle.id)
+            || membersRepo.isLoadingCircleIds.contains(circle.id))
+        && accountMembers.isEmpty
+        && guestPlayers.isEmpty
     }
 
     var body: some View {
         Group {
-            if roster.isLoadingCircleIds.contains(circle.id) && players.isEmpty {
+            if isLoading {
                 ProgressView("読み込み中...")
-            } else if players.isEmpty {
+            } else if accountMembers.isEmpty && guestPlayers.isEmpty {
                 ContentUnavailableView(
                     "参加者がいません",
                     systemImage: "person.crop.circle.badge.plus",
-                    description: Text("右上の＋から参加者を追加してください")
+                    description: Text("招待コードで参加するか、ゲスト参加者を追加してください")
                 )
             } else {
                 List {
-                    Section("参加者") {
-                        ForEach(players) { player in
+                    if !accountMembers.isEmpty {
+                        Section {
+                            ForEach(accountMembers) { member in
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(member.userName)
+                                            .font(.headline)
+                                        Text(roleLabel(member.role))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text("\(member.rating)")
+                                        .font(.subheadline.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        } header: {
+                            Text("アカウントメンバー")
+                        } footer: {
+                            Text("RallyMate・RallyHub で参加したメンバーです。試合生成にも利用できます。")
+                        }
+                    }
+
+                    Section {
+                        ForEach(guestPlayers) { player in
                             NavigationLink {
                                 PlayerFormView(circle: circle, player: player)
                             } label: {
@@ -37,7 +73,11 @@ struct CircleDetailView: View {
                                 }
                             }
                         }
-                        .onDelete(perform: deletePlayers)
+                        .onDelete(perform: deleteGuestPlayers)
+                    } header: {
+                        Text("ゲスト参加者")
+                    } footer: {
+                        Text("アカウント未登録の参加者用です。Mate のランキングには表示されません。")
                     }
 
                     Section("サークル情報") {
@@ -46,6 +86,7 @@ struct CircleDetailView: View {
                             LabeledContent("活動場所", value: circle.location)
                         }
                         LabeledContent("招待コード", value: circle.circleCode)
+                        LabeledContent("メンバー数", value: "\(circle.memberCount) 人")
                     }
                 }
             }
@@ -58,6 +99,7 @@ struct CircleDetailView: View {
                 } label: {
                     Image(systemName: "person.badge.plus")
                 }
+                .accessibilityLabel("ゲスト参加者を追加")
             }
 
             ToolbarItem(placement: .topBarLeading) {
@@ -70,10 +112,23 @@ struct CircleDetailView: View {
             }
         }
         .refreshable {
-            await roster.refresh(circleId: circle.id)
+            await reload()
         }
         .task {
-            await roster.refresh(circleId: circle.id)
+            await reload()
+        }
+    }
+
+    private func reload() async {
+        await membersRepo.refresh(circleId: circle.id)
+        try? await membersRepo.syncMembersToRoster(circleId: circle.id)
+        await roster.refresh(circleId: circle.id)
+    }
+
+    private func roleLabel(_ role: String) -> String {
+        switch role {
+        case "admin", "owner": "管理者"
+        default: "メンバー"
         }
     }
 
@@ -81,10 +136,10 @@ struct CircleDetailView: View {
         level == .experienced ? .red : .blue
     }
 
-    private func deletePlayers(at offsets: IndexSet) {
+    private func deleteGuestPlayers(at offsets: IndexSet) {
         Task {
             for index in offsets {
-                let player = players[index]
+                let player = guestPlayers[index]
                 try? await roster.deletePlayer(player)
             }
         }
