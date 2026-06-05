@@ -1,16 +1,15 @@
 import SwiftUI
-import SwiftData
 
 struct AttendanceAdjustSheet: View {
     @Bindable var sessionStore: SessionStore
+    @Bindable private var roster = CircleRosterRepository.shared
     @Environment(\.dismiss) private var dismiss
-    @Query private var allPlayers: [Player]
     @State private var errorMessage: String?
     @State private var isSyncing = false
 
-    private var circlePlayers: [Player] {
+    private var circlePlayers: [RosterPlayer] {
         guard let circleId = sessionStore.circleId else { return [] }
-        return allPlayers.filter { $0.circleId == circleId }.sorted { $0.name < $1.name }
+        return roster.players(for: circleId)
     }
 
     var body: some View {
@@ -44,14 +43,19 @@ struct AttendanceAdjustSheet: View {
                     ProgressView()
                 }
             }
+            .task {
+                if let circleId = sessionStore.circleId {
+                    await roster.refresh(circleId: circleId)
+                }
+            }
         }
     }
 
     @ViewBuilder
-    private func attendanceRow(for player: Player) -> some View {
+    private func attendanceRow(for player: RosterPlayer) -> some View {
         let sessionPlayer = SessionPlayer(from: player)
-        let isActive = sessionStore.players.contains(where: { $0.id == player.id })
-        let inProgress = sessionStore.isPlayerInProgress(player.id)
+        let isActive = sessionStore.players.contains(where: { $0.id == player.playerId })
+        let inProgress = sessionStore.isPlayerInProgress(player.playerId)
 
         Toggle(isOn: binding(for: sessionPlayer, currentlyActive: isActive)) {
             HStack {

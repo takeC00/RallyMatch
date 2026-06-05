@@ -1,16 +1,16 @@
 import SwiftUI
-import SwiftData
 
 struct PlayerFormView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
+    @Bindable private var roster = CircleRosterRepository.shared
 
-    let circle: Circle
-    var player: Player?
+    let circle: CloudCircle
+    var player: RosterPlayer?
 
     @State private var name = ""
     @State private var level: PlayerLevel = .experienced
     @State private var errorMessage: String?
+    @State private var isSaving = false
 
     var body: some View {
         Form {
@@ -36,37 +36,33 @@ struct PlayerFormView: View {
         }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("保存") { save() }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("保存") {
+                    Task { await save() }
+                }
+                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
+            }
+        }
+        .overlay {
+            if isSaving {
+                ProgressView()
             }
         }
     }
 
-    private func save() {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+    private func save() async {
+        errorMessage = ""
+        isSaving = true
+        defer { isSaving = false }
 
-        let descriptor = FetchDescriptor<Player>()
-        let existing = (try? modelContext.fetch(descriptor)) ?? []
-        let duplicate = existing.contains {
-            $0.circleId == circle.id &&
-            $0.name == trimmed &&
-            $0.id != player?.id
+        do {
+            if let player {
+                try await roster.updatePlayer(player, name: name, level: level)
+            } else {
+                _ = try await roster.addPlayer(circleId: circle.id, name: name, level: level)
+            }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
         }
-        if duplicate {
-            errorMessage = "同じ名前の参加者が既にいます"
-            return
-        }
-
-        if let player {
-            player.name = trimmed
-            player.level = level
-        } else {
-            let p = Player(circleId: circle.id, name: trimmed, level: level)
-            p.circle = circle
-            modelContext.insert(p)
-        }
-        try? modelContext.save()
-        dismiss()
     }
 }

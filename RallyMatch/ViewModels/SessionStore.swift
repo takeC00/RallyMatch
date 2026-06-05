@@ -5,7 +5,7 @@ import Observation
 @Observable
 final class SessionStore {
     var sessionId: String?
-    var circleId: UUID?
+    var circleId: String?
     var players: [SessionPlayer] = []
     /// 早退した参加者（試合履歴の名前表示用。再生成には含めない）
     var departedPlayers: [SessionPlayer] = []
@@ -60,7 +60,7 @@ final class SessionStore {
 
     /// 有効期限を過ぎていればローカル状態をクリア。クリアしたサークル ID を返す。
     @discardableResult
-    func expireIfNeeded() -> UUID? {
+    func expireIfNeeded() -> String? {
         guard !isCreatingSession,
               !isSyncing,
               sessionId != nil,

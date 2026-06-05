@@ -27,7 +27,7 @@ final class SessionSyncService {
 
     func createSession(
         sessionId: String,
-        circleId: UUID,
+        circleId: String,
         mode: GenerationMode,
         courtCount: Int,
         matchPerPlayer: Int,
@@ -41,7 +41,7 @@ final class SessionSyncService {
         let expiresAt = Timestamp(date: AppConfig.defaultExpiresAt())
 
         var sessionData: [String: Any] = [
-            "circleId": circleId.uuidString,
+            "circleId": circleId,
             "mode": mode.rawValue,
             "courtCount": courtCount,
             "matchPerPlayer": matchPerPlayer,

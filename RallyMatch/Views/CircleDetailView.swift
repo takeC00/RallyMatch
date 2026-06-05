@@ -1,19 +1,19 @@
 import SwiftUI
-import SwiftData
 
 struct CircleDetailView: View {
-    @Bindable var circle: Circle
+    let circle: CloudCircle
 
-    @Environment(\.modelContext) private var modelContext
-    @Query private var allPlayers: [Player]
+    @Bindable private var roster = CircleRosterRepository.shared
 
-    private var players: [Player] {
-        allPlayers.filter { $0.circleId == circle.id }.sorted { $0.name < $1.name }
+    private var players: [RosterPlayer] {
+        roster.players(for: circle.id)
     }
 
     var body: some View {
         Group {
-            if players.isEmpty {
+            if roster.isLoadingCircleIds.contains(circle.id) && players.isEmpty {
+                ProgressView("読み込み中...")
+            } else if players.isEmpty {
                 ContentUnavailableView(
                     "参加者がいません",
                     systemImage: "person.crop.circle.badge.plus",
@@ -38,6 +38,14 @@ struct CircleDetailView: View {
                         }
                         .onDelete(perform: deletePlayers)
                     }
+
+                    Section("サークル情報") {
+                        LabeledContent("競技", value: circle.sportName)
+                        if !circle.location.isEmpty {
+                            LabeledContent("活動場所", value: circle.location)
+                        }
+                        LabeledContent("招待コード", value: circle.circleCode)
+                    }
                 }
             }
         }
@@ -51,6 +59,12 @@ struct CircleDetailView: View {
                 }
             }
         }
+        .refreshable {
+            await roster.refresh(circleId: circle.id)
+        }
+        .task {
+            await roster.refresh(circleId: circle.id)
+        }
     }
 
     private func levelColor(_ level: PlayerLevel) -> Color {
@@ -58,9 +72,11 @@ struct CircleDetailView: View {
     }
 
     private func deletePlayers(at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(players[index])
+        Task {
+            for index in offsets {
+                let player = players[index]
+                try? await roster.deletePlayer(player)
+            }
         }
-        try? modelContext.save()
     }
 }

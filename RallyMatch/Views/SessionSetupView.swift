@@ -1,12 +1,10 @@
 import SwiftUI
-import SwiftData
 
 struct SessionSetupView: View {
-    let circle: Circle
+    let circle: CloudCircle
     var sessionStore: SessionStore
 
-    @Environment(\.modelContext) private var modelContext
-    @Query private var allPlayers: [Player]
+    @Bindable private var roster = CircleRosterRepository.shared
     @Bindable private var firebase = FirebaseManager.shared
     @State private var selectedIds: Set<UUID> = []
     @Environment(\.dismiss) private var dismiss
@@ -14,13 +12,13 @@ struct SessionSetupView: View {
     @State private var isGenerating = false
     @State private var showGenerationHelp = false
 
-    private var circlePlayers: [Player] {
-        allPlayers.filter { $0.circleId == circle.id }.sorted { $0.name < $1.name }
+    private var circlePlayers: [RosterPlayer] {
+        roster.players(for: circle.id)
     }
 
     private var selectedPlayers: [SessionPlayer] {
         circlePlayers
-            .filter { selectedIds.contains($0.id) }
+            .filter { selectedIds.contains($0.playerId) }
             .map(SessionPlayer.init(from:))
     }
 
@@ -67,7 +65,7 @@ struct SessionSetupView: View {
         Form {
             Section {
                 ForEach(circlePlayers) { player in
-                    Toggle(isOn: binding(for: player.id)) {
+                    Toggle(isOn: binding(for: player.playerId)) {
                         HStack {
                             Text(player.name)
                             Spacer()
@@ -160,19 +158,24 @@ struct SessionSetupView: View {
                 PlayerFormView(circle: circle, player: nil)
             }
         }
+        .task {
+            await roster.refresh(circleId: circle.id)
+        }
         .onAppear {
             sessionStore.circleId = circle.id
             if sessionStore.matches.isEmpty {
                 _ = sessionStore.expireIfNeeded()
             }
-            if selectedIds.isEmpty {
-                selectedIds = Set(circlePlayers.map(\.id))
-            }
+            syncDefaultSelection()
         }
-        .onChange(of: circlePlayers.count) { _, _ in
-            if selectedIds.isEmpty, !circlePlayers.isEmpty {
-                selectedIds = Set(circlePlayers.map(\.id))
-            }
+        .onChange(of: circlePlayers.map(\.playerId)) { _, _ in
+            syncDefaultSelection()
+        }
+    }
+
+    private func syncDefaultSelection() {
+        if selectedIds.isEmpty, !circlePlayers.isEmpty {
+            selectedIds = Set(circlePlayers.map(\.playerId))
         }
     }
 
@@ -200,7 +203,7 @@ struct SessionSetupView: View {
 
         sessionStore.clearSyncError()
         sessionStore.players = circlePlayers
-            .filter { selectedIds.contains($0.id) }
+            .filter { selectedIds.contains($0.playerId) }
             .map(SessionPlayer.init(from:))
         sessionStore.circleId = circle.id
         sessionStore.sessionId = AppConfig.stableSessionId(for: circle.id)
@@ -214,8 +217,7 @@ struct SessionSetupView: View {
 
         guard let uid = firebase.uid else { return }
         do {
-            // 旧仕様（主催者 UID を sessionId にしていた時代）の孤立セッションを掃除
-            if let previousId = circle.activeSessionId,
+            if let previousId = CircleSessionPreferences.activeSessionId(for: circle.id),
                previousId != sessionStore.sessionId {
                 do {
                     try await SessionSyncService.shared.deleteSession(sessionId: previousId)
@@ -224,8 +226,7 @@ struct SessionSetupView: View {
                 }
             }
             try await sessionStore.syncCreate(ownerUid: uid)
-            circle.activeSessionId = sessionStore.sessionId
-            try modelContext.save()
+            CircleSessionPreferences.setActiveSessionId(sessionStore.sessionId, for: circle.id)
             sessionStore.errorMessage = nil
             dismiss()
         } catch {

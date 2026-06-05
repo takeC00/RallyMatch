@@ -1,35 +1,54 @@
 import SwiftUI
-import SwiftData
 
 struct MembersTabView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Circle.createdAt) private var circles: [Circle]
+    @Bindable private var firebase = FirebaseManager.shared
+    @Bindable private var roster = CircleRosterRepository.shared
 
     var body: some View {
         NavigationStack {
             Group {
-                if circles.isEmpty {
+                if firebase.isLoadingCircles && firebase.joinedCircles.isEmpty {
+                    ProgressView("サークル読み込み中...")
+                } else if firebase.joinedCircles.isEmpty {
                     ContentUnavailableView(
                         "サークルがありません",
                         systemImage: "person.3",
-                        description: Text("右上の「サークル作成」から追加してください")
+                        description: Text("右上から作成するか、招待コードで参加してください")
                     )
                 } else {
-                    List {
-                        ForEach(circles) { circle in
-                            NavigationLink {
-                                CircleDetailView(circle: circle)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
+                    List(firebase.joinedCircles) { circle in
+                        NavigationLink {
+                            CircleDetailView(circle: circle)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
                                     Text(circle.name)
                                         .font(.headline)
-                                    Text("\(circle.players.count) 名登録")
-                                        .font(.caption)
+                                    if firebase.currentCircleId == circle.id {
+                                        Text("選択中")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(.blue.opacity(0.15))
+                                            .foregroundStyle(.blue)
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                                Text("\(roster.players(for: circle.id).count) 名登録")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if !circle.sportName.isEmpty {
+                                    Text(circle.sportName)
+                                        .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
                             }
                         }
-                        .onDelete(perform: deleteCircles)
+                        .contextMenu {
+                            Button("このサークルを選択") {
+                                Task { try? await firebase.setCurrentCircle(circle.id) }
+                            }
+                        }
                     }
                 }
             }
@@ -44,7 +63,14 @@ struct MembersTabView: View {
                     .accessibilityLabel("設定")
                 }
 
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    NavigationLink {
+                        CircleJoinView()
+                    } label: {
+                        Image(systemName: "ticket")
+                    }
+                    .accessibilityLabel("招待コードで参加")
+
                     NavigationLink {
                         CircleFormView()
                     } label: {
@@ -56,13 +82,19 @@ struct MembersTabView: View {
                     }
                 }
             }
+            .refreshable {
+                await firebase.refreshCircles()
+                await roster.refreshAll(circleIds: firebase.joinedCircles.map(\.id))
+            }
+            .task {
+                await firebase.refreshCircles()
+                await roster.refreshAll(circleIds: firebase.joinedCircles.map(\.id))
+            }
+            .onChange(of: firebase.joinedCircles.map(\.id)) { _, circleIds in
+                Task {
+                    await roster.refreshAll(circleIds: circleIds)
+                }
+            }
         }
-    }
-
-    private func deleteCircles(at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(circles[index])
-        }
-        try? modelContext.save()
     }
 }

@@ -13,9 +13,13 @@ final class FirebaseManager {
     private(set) var isReady = false
     private(set) var currentUserEmail: String?
     private(set) var currentUserName: String = ""
+    private(set) var joinedCircles: [CloudCircle] = []
+    private(set) var currentCircleId: String?
+    private(set) var isLoadingCircles = false
     var lastError: String?
 
     private var authListener: AuthStateDidChangeListenerHandle?
+    private var suppressAuthListener = false
 
     private var db: Firestore {
         Firestore.firestore()
@@ -104,54 +108,59 @@ final class FirebaseManager {
         name: String,
         completion: @escaping (Result<Void, Error>) -> Void
     ) {
+        Task {
+            do {
+                try await signUp(email: email, password: password, name: name)
+                completion(.success(()))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+
+    func signUp(email: String, password: String, name: String) async throws {
         guard configureIfNeeded() else {
-            completion(.failure(Self.configurationError))
-            return
+            throw Self.configurationError
         }
 
-        Auth.auth().createUser(withEmail: email, password: password) { [weak self] result, error in
-            if let error {
-                Task { @MainActor in
-                    completion(.failure(error))
-                }
-                return
-            }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw NSError(
+                domain: "",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "表示名を入力してください"]
+            )
+        }
 
-            guard let user = result?.user else {
-                Task { @MainActor in
-                    completion(
-                        .failure(
-                            NSError(
-                                domain: "",
-                                code: -1,
-                                userInfo: [NSLocalizedDescriptionKey: "アカウント作成に失敗しました"]
-                            )
-                        )
-                    )
-                }
-                return
-            }
+        suppressAuthListener = true
+        defer { suppressAuthListener = false }
 
-            self?.db.collection("users").document(user.uid).setData([
+        let result = try await Auth.auth().createUser(withEmail: email, password: password)
+        let user = result.user
+
+        do {
+            _ = try await user.getIDToken(forcingRefresh: true)
+            let now = Timestamp()
+            try await db.collection("users").document(user.uid).setData([
                 "userId": user.uid,
-                "name": name,
+                "name": trimmedName,
                 "email": email,
                 "currentCircleId": NSNull(),
-                "createdAt": Timestamp()
-            ]) { error in
-                if let error {
-                    Task { @MainActor in
-                        completion(.failure(error))
-                    }
-                    return
-                }
+                "createdAt": now,
+                "updatedAt": now,
+                "fcmTokens": []
+            ])
 
-                Task { @MainActor in
-                    self?.currentUserName = name
-                    self?.applyAuthUser(user)
-                    completion(.success(()))
-                }
-            }
+            currentUserName = trimmedName
+            applyAuthUser(user)
+            await refreshCircles()
+        } catch {
+            try? await user.delete()
+            uid = nil
+            currentUserEmail = nil
+            currentUserName = ""
+            isReady = false
+            throw error
         }
     }
 
@@ -164,17 +173,261 @@ final class FirebaseManager {
         }
     }
 
+    func createCircle(
+        name: String,
+        sportName: String,
+        description: String,
+        location: String,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        guard configureIfNeeded() else {
+            completion(.failure(Self.configurationError))
+            return
+        }
+        guard let uid else {
+            completion(.failure(Self.configurationError))
+            return
+        }
+
+        let document = db.collection("circles").document()
+        let circleId = document.documentID
+        let circleCode = String(circleId.prefix(6)).uppercased()
+        let now = Timestamp()
+
+        let circleData: [String: Any] = [
+            "name": name,
+            "description": description,
+            "sportName": sportName,
+            "location": location,
+            "ownerId": uid,
+            "memberIds": [uid],
+            "circleCode": circleCode,
+            "createdAt": now
+        ]
+
+        let memberId = "\(circleId)_\(uid)"
+        let memberData: [String: Any] = [
+            "circleId": circleId,
+            "userId": uid,
+            "userName": currentUserName.isEmpty ? name : currentUserName,
+            "rating": 1500,
+            "role": "admin",
+            "joinedAt": now
+        ]
+
+        document.setData(circleData) { [weak self] error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+
+            self?.db.collection("circleMembers").document(memberId).setData(memberData) { error in
+                if let error {
+                    completion(.failure(error))
+                    return
+                }
+
+                self?.db.collection("users").document(uid).updateData([
+                    "currentCircleId": circleId
+                ]) { error in
+                    if let error {
+                        completion(.failure(error))
+                        return
+                    }
+                    Task { @MainActor in
+                        self?.currentCircleId = circleId
+                        await self?.refreshCircles()
+                        completion(.success(circleId))
+                    }
+                }
+            }
+        }
+    }
+
+    func refreshCircles() async {
+        guard configureIfNeeded(), let uid else {
+            joinedCircles = []
+            currentCircleId = nil
+            return
+        }
+
+        isLoadingCircles = true
+        defer { isLoadingCircles = false }
+
+        do {
+            let userDoc = try await db.collection("users").document(uid).getDocument()
+            currentCircleId = userDoc.data()?["currentCircleId"] as? String
+
+            let snapshot = try await db.collection("circles")
+                .whereField("memberIds", arrayContains: uid)
+                .getDocuments()
+
+            joinedCircles = snapshot.documents
+                .compactMap { CloudCircle.from($0) }
+                .sorted { $0.createdAt > $1.createdAt }
+
+            if currentCircleId == nil {
+                currentCircleId = joinedCircles.first?.id
+            } else if let currentCircleId,
+                      !joinedCircles.contains(where: { $0.id == currentCircleId }) {
+                self.currentCircleId = joinedCircles.first?.id
+            }
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func setCurrentCircle(_ circleId: String) async throws {
+        guard configureIfNeeded(), let uid else {
+            throw Self.configurationError
+        }
+
+        try await db.collection("users").document(uid).updateData([
+            "currentCircleId": circleId
+        ])
+        currentCircleId = circleId
+    }
+
+    func joinCircle(
+        code: String,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        guard configureIfNeeded() else {
+            completion(.failure(Self.configurationError))
+            return
+        }
+        guard let uid else {
+            completion(.failure(Self.configurationError))
+            return
+        }
+
+        let normalizedCode = code
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        guard !normalizedCode.isEmpty else {
+            completion(
+                .failure(
+                    NSError(
+                        domain: "",
+                        code: -2,
+                        userInfo: [NSLocalizedDescriptionKey: "招待コードを入力してください"]
+                    )
+                )
+            )
+            return
+        }
+
+        db.collection("circles")
+            .whereField("circleCode", isEqualTo: normalizedCode)
+            .limit(to: 1)
+            .getDocuments { [weak self] snapshot, error in
+                if let error {
+                    completion(.failure(error))
+                    return
+                }
+
+                guard let doc = snapshot?.documents.first else {
+                    completion(
+                        .failure(
+                            NSError(
+                                domain: "",
+                                code: -3,
+                                userInfo: [NSLocalizedDescriptionKey: "該当するサークルが見つかりません"]
+                            )
+                        )
+                    )
+                    return
+                }
+
+                let circleId = doc.documentID
+
+                self?.db.collection("circles")
+                    .document(circleId)
+                    .updateData([
+                        "memberIds": FieldValue.arrayUnion([uid])
+                    ]) { error in
+                        if let error {
+                            completion(.failure(error))
+                            return
+                        }
+
+                        self?.upsertMembership(circleId: circleId, userId: uid, role: "member") { result in
+                            switch result {
+                            case .failure(let error):
+                                completion(.failure(error))
+                            case .success:
+                                self?.db.collection("users").document(uid).updateData([
+                                    "currentCircleId": circleId
+                                ]) { error in
+                                    if let error {
+                                        completion(.failure(error))
+                                        return
+                                    }
+                                    Task { @MainActor in
+                                        self?.currentCircleId = circleId
+                                        await self?.refreshCircles()
+                                        completion(.success(circleId))
+                                    }
+                                }
+                            }
+                        }
+                    }
+            }
+    }
+
+    private func upsertMembership(
+        circleId: String,
+        userId: String,
+        role: String,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        db.collection("users").document(userId).getDocument { [weak self] snapshot, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+
+            let userName = (snapshot?.data()?["name"] as? String)
+                ?? (snapshot?.data()?["nickname"] as? String)
+                ?? (self?.currentUserName ?? "")
+            let displayName = userName.isEmpty ? "Unknown" : userName
+            let docId = "\(circleId)_\(userId)"
+            let data: [String: Any] = [
+                "circleId": circleId,
+                "userId": userId,
+                "userName": displayName,
+                "rating": 1500,
+                "role": role,
+                "joinedAt": Timestamp()
+            ]
+
+            self?.db.collection("circleMembers").document(docId).setData(data, merge: true) { error in
+                if let error {
+                    completion(.failure(error))
+                } else {
+                    completion(.success(()))
+                }
+            }
+        }
+    }
+
     private func applyAuthUser(_ user: User?) {
+        if suppressAuthListener { return }
+
         if let user, !user.isAnonymous {
             uid = user.uid
             currentUserEmail = user.email
             isReady = true
             lastError = nil
             fetchUserProfile()
+            Task { await refreshCircles() }
         } else {
             uid = nil
             currentUserEmail = nil
             currentUserName = ""
+            joinedCircles = []
+            currentCircleId = nil
             isReady = false
         }
     }
@@ -185,7 +438,9 @@ final class FirebaseManager {
         db.collection("users").document(uid).getDocument { [weak self] snapshot, _ in
             Task { @MainActor in
                 guard let self, self.uid == uid else { return }
-                let name = snapshot?.data()?["name"] as? String ?? ""
+                let name = (snapshot?.data()?["name"] as? String)
+                    ?? (snapshot?.data()?["nickname"] as? String)
+                    ?? ""
                 if !name.isEmpty {
                     self.currentUserName = name
                 }
@@ -193,15 +448,25 @@ final class FirebaseManager {
         }
     }
 
-    static func loginErrorMessage(for error: Error) -> String {
-        authFormErrorMessage(for: error, fallback: "ログインに失敗しました")
-    }
-
     static func signUpErrorMessage(for error: Error) -> String {
-        authFormErrorMessage(for: error, fallback: "アカウント作成に失敗しました")
+        if let message = authFormErrorMessage(for: error, fallback: nil) {
+            return message
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == FirestoreErrorDomain,
+           nsError.code == FirestoreErrorCode.permissionDenied.rawValue {
+            return "プロフィールの保存に失敗しました。通信環境を確認して再度お試しください"
+        }
+
+        let description = nsError.localizedDescription
+        if !description.isEmpty {
+            return description
+        }
+        return "アカウント作成に失敗しました"
     }
 
-    private static func authFormErrorMessage(for error: Error, fallback: String) -> String {
+    private static func authFormErrorMessage(for error: Error, fallback: String?) -> String? {
         guard let errorCode = AuthErrorCode(rawValue: (error as NSError).code) else {
             return fallback
         }
@@ -224,6 +489,11 @@ final class FirebaseManager {
         default:
             return fallback
         }
+    }
+
+    static func loginErrorMessage(for error: Error) -> String {
+        authFormErrorMessage(for: error, fallback: nil)
+            ?? "ログインに失敗しました"
     }
 
     private static var configurationError: NSError {

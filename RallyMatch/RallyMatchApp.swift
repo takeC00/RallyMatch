@@ -4,7 +4,6 @@
 //
 
 import SwiftUI
-import SwiftData
 import FirebaseCore
 
 @main
@@ -21,6 +20,5 @@ struct RallyMatchApp: App {
         WindowGroup {
             RootView()
         }
-        .modelContainer(for: [Circle.self, Player.self])
     }
 }

@@ -11,8 +11,8 @@ struct SessionPlayer: Identifiable, Hashable {
         self.level = level
     }
 
-    init(from player: Player) {
-        self.id = player.id
+    init(from player: RosterPlayer) {
+        self.id = player.playerId
         self.name = player.name
         self.level = player.level
     }

@@ -13,119 +13,46 @@ struct RegisterView: View {
     @State private var isLoading = false
 
     private var isRegisterEnabled: Bool {
-        !name.isEmpty && !email.isEmpty && !password.isEmpty && !isLoading
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !email.isEmpty
+            && !password.isEmpty
+            && !isLoading
     }
 
     var body: some View {
-        ZStack {
-            Image("login_bg")
-                .resizable()
-                .scaledToFill()
-                .frame(
-                    width: UIScreen.main.bounds.width,
-                    height: UIScreen.main.bounds.height
-                )
-                .clipped()
-                .ignoresSafeArea()
-
-            LinearGradient(
-                colors: [
-                    Color.black.opacity(0.15),
-                    Color.black.opacity(0.5)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            ScrollView {
-                VStack(spacing: 22) {
-                    Spacer()
-                        .frame(height: 120)
-
-                    VStack(spacing: 16) {
-                        authField(icon: "person", fieldBackgroundOpacity: 0.84) {
-                            TextField("表示名", text: $name)
-                                .foregroundColor(.black)
-                        }
-
-                        authField(icon: "envelope", fieldBackgroundOpacity: 0.84) {
-                            TextField("メールアドレス", text: $email)
-                                .foregroundColor(.black)
-                                .keyboardType(.emailAddress)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled(true)
-                        }
-
-                        authField(icon: "lock", fieldBackgroundOpacity: 0.84) {
-                            HStack {
-                                Group {
-                                    if showPassword {
-                                        TextField("パスワード", text: $password)
-                                            .foregroundColor(.black)
-                                    } else {
-                                        SecureField("パスワード", text: $password)
-                                            .foregroundColor(.black)
-                                    }
-                                }
-
-                                Button {
-                                    showPassword.toggle()
-                                } label: {
-                                    Image(systemName: showPassword ? "eye.slash" : "eye")
-                                        .foregroundColor(.black)
-                                }
-                            }
-                        }
-
-                        if !errorMessage.isEmpty {
-                            authErrorBanner(errorMessage)
-                        }
-
-                        Button {
-                            hideKeyboard()
-                            errorMessage = ""
-                            isLoading = true
-
-                            firebase.signUp(email: email, password: password, name: name) { result in
-                                isLoading = false
-                                switch result {
-                                case .success:
-                                    dismiss()
-                                case .failure(let error):
-                                    errorMessage = FirebaseManager.signUpErrorMessage(for: error)
-                                }
-                            }
-                        } label: {
-                            authPrimaryButtonLabel(
-                                title: isLoading ? "登録中..." : "アカウント作成",
-                                systemImage: "person.crop.circle.badge.plus",
-                                isLoading: isLoading,
-                                isEnabled: isRegisterEnabled
-                            )
-                        }
-                        .disabled(!isRegisterEnabled)
-                    }
-                    .padding(.horizontal, 28)
-
-                    Spacer()
-                        .frame(height: 120)
-                }
-            }
-        }
-        .navigationBarTitleDisplayMode(.inline)
+        RallySignUpFormView(
+            name: $name,
+            email: $email,
+            password: $password,
+            showPassword: $showPassword,
+            errorMessage: $errorMessage,
+            isLoading: isLoading,
+            isEnabled: isRegisterEnabled,
+            onSubmit: signUp
+        )
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("閉じる") {
-                    dismiss()
-                }
-                .foregroundColor(.white)
+                Button("閉じる") { dismiss() }
             }
         }
     }
-}
 
-// MARK: - ログイン / 登録フォーム共通（LoginView と共有）
+    private func signUp() {
+        hideKeyboard()
+        errorMessage = ""
+        isLoading = true
+
+        Task { @MainActor in
+            do {
+                try await firebase.signUp(email: email, password: password, name: name)
+                dismiss()
+            } catch {
+                errorMessage = FirebaseManager.signUpErrorMessage(for: error)
+            }
+            isLoading = false
+        }
+    }
+}
 
 func authField<Content: View>(
     icon: String,

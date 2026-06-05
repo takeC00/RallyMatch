@@ -1,11 +1,9 @@
 import SwiftUI
-import SwiftData
 
 struct MatchGenerationTabView: View {
     @Environment(SessionStore.self) private var sessionStore
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Circle.createdAt) private var circles: [Circle]
-    @Query private var allPlayers: [Player]
+    @Bindable private var firebase = FirebaseManager.shared
+    @Bindable private var roster = CircleRosterRepository.shared
     @State private var showNewSessionConfirm = false
     @State private var isEndingSession = false
 
@@ -22,14 +20,16 @@ struct MatchGenerationTabView: View {
                         onRequestNewSession: { showNewSessionConfirm = true },
                         isEndingSession: isEndingSession
                     )
-                } else if circles.isEmpty {
+                } else if firebase.isLoadingCircles && firebase.joinedCircles.isEmpty {
+                    ProgressView("サークル読み込み中...")
+                } else if firebase.joinedCircles.isEmpty {
                     ContentUnavailableView(
                         "サークルがありません",
                         systemImage: "sportscourt",
-                        description: Text("メンバー登録タブでサークルを作成してください")
+                        description: Text("メンバー登録タブでサークルを作成または参加してください")
                     )
                 } else {
-                    List(circles) { circle in
+                    List(firebase.joinedCircles) { circle in
                         NavigationLink {
                             SessionSetupView(circle: circle, sessionStore: sessionStore)
                         } label: {
@@ -66,6 +66,14 @@ struct MatchGenerationTabView: View {
             } message: {
                 Text("進行中の試合はクラウドからも削除され、元に戻せません。他サークルの QR や試合データには影響しません。")
             }
+            .refreshable {
+                await firebase.refreshCircles()
+                await roster.refreshAll(circleIds: firebase.joinedCircles.map(\.id))
+            }
+            .task {
+                await firebase.refreshCircles()
+                await roster.refreshAll(circleIds: firebase.joinedCircles.map(\.id))
+            }
             .onAppear {
                 clearExpiredSessionIfNeeded()
             }
@@ -74,15 +82,13 @@ struct MatchGenerationTabView: View {
 
     private func clearExpiredSessionIfNeeded() {
         guard let circleId = sessionStore.expireIfNeeded() else { return }
-        if let circle = circles.first(where: { $0.id == circleId }),
-           circle.activeSessionId != nil {
-            circle.activeSessionId = nil
-            try? modelContext.save()
+        if CircleSessionPreferences.activeSessionId(for: circleId) != nil {
+            CircleSessionPreferences.setActiveSessionId(nil, for: circleId)
         }
     }
 
-    private func playerCount(for circle: Circle) -> Int {
-        allPlayers.filter { $0.circleId == circle.id }.count
+    private func playerCount(for circle: CloudCircle) -> Int {
+        roster.players(for: circle.id).count
     }
 
     private func endCurrentSessionAndReset() async {
@@ -102,10 +108,8 @@ struct MatchGenerationTabView: View {
         }
 
         if let circleId,
-           let circle = circles.first(where: { $0.id == circleId }),
-           circle.activeSessionId == sessionId {
-            circle.activeSessionId = nil
-            try? modelContext.save()
+           CircleSessionPreferences.activeSessionId(for: circleId) == sessionId {
+            CircleSessionPreferences.setActiveSessionId(nil, for: circleId)
         }
 
         sessionStore.reset()

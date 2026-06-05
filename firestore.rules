@@ -1,9 +1,63 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ── 共通 ──────────────────────────────────────────
+
     function isSignedIn() {
       return request.auth != null;
     }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function memberPath(circleId) {
+      return /databases/$(database)/documents/circleMembers/$(circleId + '_' + request.auth.uid);
+    }
+
+    function circlePath(circleId) {
+      return /databases/$(database)/documents/circles/$(circleId);
+    }
+
+    function memberDoc(circleId) {
+      return get(memberPath(circleId));
+    }
+
+    function circleDoc(circleId) {
+      return get(circlePath(circleId));
+    }
+
+    // circleMembers の exists だけだと events のクエリが拒否されることがあるため、
+    // circles.ownerId / memberIds でもメンバー判定する
+    function isCircleMember(circleId) {
+      return isSignedIn() && (
+        exists(memberPath(circleId))
+        || circleDoc(circleId).data.ownerId == request.auth.uid
+        || ('memberIds' in circleDoc(circleId).data
+          && request.auth.uid in circleDoc(circleId).data.memberIds)
+      );
+    }
+
+    function isOwnerOrAdmin(circleId) {
+      return isSignedIn() && (
+        circleDoc(circleId).data.ownerId == request.auth.uid
+        || (exists(memberPath(circleId))
+          && memberDoc(circleId).data.role in ['owner', 'admin'])
+      );
+    }
+
+    // 招待コード参加: まだ memberIds に含まれない本人だけが自分を追加できる
+    function isSelfJoiningCircle(circleId) {
+      return isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
+        && request.auth.uid in request.resource.data.memberIds
+        && !('memberIds' in resource.data
+          && request.auth.uid in resource.data.memberIds);
+    }
+
+    // ── RallyMatch ─────────────────────────────────────
 
     function isSessionOwner(sessionId) {
       return isSignedIn()
@@ -11,11 +65,8 @@ service cloud.firestore {
     }
 
     match /sessions/{sessionId} {
-      // Participants: read-only (no login required)
       allow get: if true;
       allow list: if false;
-
-      // Organizer: only the authenticated owner can write
       allow create: if isSignedIn()
         && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isSessionOwner(sessionId);
@@ -30,6 +81,119 @@ service cloud.firestore {
         allow create, update, delete: if isSessionOwner(sessionId);
       }
     }
+
+    // ── RallyHub / RallyMate 共通コレクション ──────────
+
+    match /users/{userId} {
+      allow read, write: if isSelf(userId);
+    }
+
+    match /circles/{circleId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.memberIds is list
+        && request.resource.data.memberIds.size() == 1
+        && request.resource.data.memberIds[0] == request.auth.uid;
+      allow update: if isOwnerOrAdmin(circleId)
+        || isSelfJoiningCircle(circleId)
+        || (isCircleMember(circleId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['memberIds', 'updatedAt']));
+      allow delete: if isSignedIn()
+        && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /circleMembers/{memberId} {
+      allow read: if isSignedIn()
+        && (resource == null
+          || resource.data.userId == request.auth.uid
+          || isCircleMember(resource.data.circleId));
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.role in ['member', 'owner', 'admin'];
+      allow update: if isSignedIn()
+        && (
+          (resource.data.circleId != null
+            && get(/databases/$(database)/documents/circles/$(resource.data.circleId)).data.ownerId == request.auth.uid)
+          || (isCircleMember(resource.data.circleId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating']))
+        );
+      allow delete: if isSignedIn()
+        && resource.data.circleId != null
+        && get(/databases/$(database)/documents/circles/$(resource.data.circleId)).data.ownerId == request.auth.uid;
+    }
+
+    match /events/{eventId} {
+      allow read: if isSignedIn()
+        && isCircleMember(resource.data.circleId);
+      allow create: if isSignedIn()
+        && isOwnerOrAdmin(request.resource.data.circleId);
+      allow update: if isSignedIn()
+        && isCircleMember(resource.data.circleId)
+        && (
+          isOwnerOrAdmin(resource.data.circleId)
+          || request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['participantCount', 'absentCount', 'pendingCount', 'isFull', 'updatedAt', 'fullNotifiedAt', 'vacancyNotifiedAt'])
+        );
+      allow delete: if isSignedIn()
+        && isOwnerOrAdmin(resource.data.circleId);
+    }
+
+    match /eventParticipants/{participantId} {
+      allow read: if isSignedIn()
+        && (resource == null
+          || resource.data.userId == request.auth.uid
+          || isCircleMember(resource.data.circleId));
+      allow create, update: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && isCircleMember(request.resource.data.circleId);
+      allow delete: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    match /eventVisitors/{visitorId} {
+      allow read: if isSignedIn()
+        && isCircleMember(resource.data.circleId);
+      allow create: if isSignedIn()
+        && isOwnerOrAdmin(request.resource.data.circleId);
+      allow update, delete: if isSignedIn()
+        && isOwnerOrAdmin(resource.data.circleId);
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if isSignedIn()
+        && isCircleMember(resource.data.circleId);
+      allow create: if isSignedIn()
+        && isOwnerOrAdmin(request.resource.data.circleId);
+      allow update, delete: if isSignedIn()
+        && isOwnerOrAdmin(resource.data.circleId);
+    }
+
+    // ── RallyMatch サークル参加者名簿 ─────────────────
+
+    match /circleRoster/{rosterId} {
+      allow read: if isSignedIn()
+        && isCircleMember(resource.data.circleId);
+      allow create: if isSignedIn()
+        && isCircleMember(request.resource.data.circleId)
+        && request.resource.data.circleId is string
+        && request.resource.data.name is string
+        && request.resource.data.playerId is string
+        && request.resource.data.level is string;
+      allow update, delete: if isSignedIn()
+        && isCircleMember(resource.data.circleId);
+    }
+
+    // ── RallyMate ──────────────────────────────────────
+
+    match /matches/{matchId} {
+      allow read: if isSignedIn()
+        && isCircleMember(resource.data.circleId);
+      allow create: if isSignedIn()
+        && isCircleMember(request.resource.data.circleId);
+      allow update, delete: if isSignedIn()
+        && isCircleMember(resource.data.circleId);
+    }
   }
 }
-
