@@ -15,6 +15,7 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 1.5), value: showSplash)
+        .background(Color.black.ignoresSafeArea())
         .task {
             FirebaseManager.shared.startAuthListener()
             FirebaseManager.shared.bootstrapSession()

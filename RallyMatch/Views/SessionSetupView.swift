@@ -226,6 +226,7 @@ struct SessionSetupView: View {
         .onChange(of: dayParticipants.map(\.id)) { _, _ in
             syncDefaultDaySelection()
         }
+        .rallyDarkFormScreen()
     }
 
     private func reloadMembers() async {

@@ -78,6 +78,8 @@ struct MatchGenerationTabView: View {
             .onAppear {
                 clearExpiredSessionIfNeeded()
             }
+            .rallyDarkScreenBackground()
+            .rallyDarkNavigationBar()
         }
     }
 

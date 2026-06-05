@@ -10,6 +10,7 @@ import FirebaseCore
 struct RallyMatchApp: App {
 
     init() {
+        RallyAppearance.configure()
         if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil,
            FirebaseApp.app() == nil {
             FirebaseApp.configure()
@@ -19,6 +20,7 @@ struct RallyMatchApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .preferredColorScheme(.dark)
         }
     }
 }

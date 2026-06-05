@@ -28,19 +28,11 @@ enum CircleDeletionService {
         try await deleteQuery(
             db.collection("matches").whereField("circleId", isEqualTo: circleId)
         )
+        try await deleteQuery(
+            db.collection("ratingSnapshots").whereField("circleId", isEqualTo: circleId)
+        )
 
-        let sessions = try await db.collection("sessions")
-            .whereField("circleId", isEqualTo: circleId)
-            .getDocuments()
-        for document in sessions.documents {
-            try await SessionSyncService.shared.deleteSession(sessionId: document.documentID)
-        }
-
-        let stableSessionId = AppConfig.stableSessionId(for: circleId)
-        let stableRef = db.collection("sessions").document(stableSessionId)
-        if (try await stableRef.getDocument()).exists {
-            try await SessionSyncService.shared.deleteSession(sessionId: stableSessionId)
-        }
+        await deleteSessions(for: circleId)
 
         try await deleteQuery(
             db.collection("circleMembers").whereField("circleId", isEqualTo: circleId)
@@ -55,6 +47,23 @@ enum CircleDeletionService {
                 "currentCircleId": FieldValue.delete(),
                 "updatedAt": Timestamp(date: .now),
             ])
+        }
+    }
+
+    private static func deleteSessions(for circleId: String) async {
+        let stableSessionId = AppConfig.stableSessionId(for: circleId)
+        try? await SessionSyncService.shared.deleteSession(sessionId: stableSessionId)
+
+        // レガシー session（list 権限が必要なため失敗してもサークル削除は続行）
+        do {
+            let sessions = try await db.collection("sessions")
+                .whereField("circleId", isEqualTo: circleId)
+                .getDocuments()
+            for document in sessions.documents where document.documentID != stableSessionId {
+                try await SessionSyncService.shared.deleteSession(sessionId: document.documentID)
+            }
+        } catch {
+            // stableSessionId の削除だけでも通常は十分
         }
     }
 

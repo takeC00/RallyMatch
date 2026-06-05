@@ -63,6 +63,7 @@ struct RallySignUpFormView: View {
         }
         .navigationTitle("新規登録")
         .navigationBarTitleDisplayMode(.inline)
+        .rallyDarkFormScreen()
     }
 }
 
@@ -120,5 +121,6 @@ struct RallyCircleCreateFormView: View {
         }
         .navigationTitle("サークル作成")
         .navigationBarTitleDisplayMode(.inline)
+        .rallyDarkFormScreen()
     }
 }

@@ -81,7 +81,9 @@ service cloud.firestore {
 
     match /sessions/{sessionId} {
       allow get: if true;
-      allow list: if false;
+      allow list: if isSignedIn()
+        && resource.data.circleId != null
+        && isCircleOwner(resource.data.circleId);
       allow create: if isSignedIn()
         && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isSessionOwner(sessionId);

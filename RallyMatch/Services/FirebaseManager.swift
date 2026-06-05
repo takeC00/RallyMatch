@@ -327,39 +327,29 @@ final class FirebaseManager {
             "createdAt": now
         ]
 
-        let memberId = "\(circleId)_\(uid)"
-        let memberData: [String: Any] = [
-            "circleId": circleId,
-            "userId": uid,
-            "userName": currentUserName.isEmpty ? name : currentUserName,
-            "rating": 1500,
-            "role": "admin",
-            "joinedAt": now
-        ]
-
         document.setData(circleData) { [weak self] error in
             if let error {
                 completion(.failure(error))
                 return
             }
 
-            self?.db.collection("circleMembers").document(memberId).setData(memberData) { error in
-                if let error {
+            self?.upsertMembership(circleId: circleId, userId: uid, role: "admin") { result in
+                switch result {
+                case .failure(let error):
                     completion(.failure(error))
-                    return
-                }
-
-                self?.db.collection("users").document(uid).updateData([
-                    "currentCircleId": circleId
-                ]) { error in
-                    if let error {
-                        completion(.failure(error))
-                        return
-                    }
-                    Task { @MainActor in
-                        self?.currentCircleId = circleId
-                        await self?.refreshCircles()
-                        completion(.success(circleId))
+                case .success:
+                    self?.db.collection("users").document(uid).updateData([
+                        "currentCircleId": circleId
+                    ]) { error in
+                        if let error {
+                            completion(.failure(error))
+                            return
+                        }
+                        Task { @MainActor in
+                            self?.currentCircleId = circleId
+                            await self?.refreshCircles()
+                            completion(.success(circleId))
+                        }
                     }
                 }
             }

@@ -38,6 +38,8 @@ struct SessionCheckTabView: View {
                 }
             }
             .navigationTitle("確認")
+            .rallyDarkScreenBackground()
+            .rallyDarkNavigationBar()
         }
     }
 }

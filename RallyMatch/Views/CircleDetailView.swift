@@ -156,6 +156,8 @@ struct CircleDetailView: View {
             }
         }
         .navigationTitle(circle.name)
+        .rallyDarkScreenBackground()
+        .rallyDarkNavigationBar()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

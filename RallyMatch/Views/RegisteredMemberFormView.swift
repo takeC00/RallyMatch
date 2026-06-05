@@ -92,6 +92,7 @@ struct RegisteredMemberFormView: View {
         } message: {
             Text("「\(member.userName)」をサークルから除外します。")
         }
+        .rallyDarkFormScreen()
     }
 
     private func save() async {

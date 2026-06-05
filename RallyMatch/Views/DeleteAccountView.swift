@@ -61,6 +61,7 @@ struct DeleteAccountView: View {
         }
         .navigationTitle("アカウント削除")
         .navigationBarTitleDisplayMode(.inline)
+        .rallyDarkFormScreen()
     }
 
     private func runDelete() async {
