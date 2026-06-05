@@ -208,6 +208,93 @@ final class FirebaseManager {
         }
     }
 
+    /// 自分の Firebase Auth アカウント削除 + Firestore の関連データ掃除
+    func deleteMyAccount(password: String?) async throws {
+        guard configureIfNeeded() else { throw Self.configurationError }
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(
+                domain: "RallyMatch",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "ログイン情報が取得できません"]
+            )
+        }
+
+        let uid = user.uid
+        try await reauthenticateIfNeeded(user: user, password: password)
+        try await cleanupFirestoreForDeletedUser(uid: uid)
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            user.delete { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+
+        logout()
+    }
+
+    private func reauthenticateIfNeeded(user: User, password: String?) async throws {
+        let providers = user.providerData.map(\.providerID)
+        guard providers.contains("password") else { return }
+
+        guard
+            let email = user.email,
+            let password,
+            !password.isEmpty
+        else {
+            throw NSError(
+                domain: "RallyMatch",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "再認証のためパスワードが必要です"]
+            )
+        }
+
+        let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            user.reauthenticate(with: credential) { _, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    private func cleanupFirestoreForDeletedUser(uid: String) async throws {
+        try await db.collection("users").document(uid).delete()
+
+        let memberships = try await db.collection("circleMembers")
+            .whereField("userId", isEqualTo: uid)
+            .getDocuments()
+
+        if !memberships.documents.isEmpty {
+            let batch = db.batch()
+            for document in memberships.documents {
+                batch.deleteDocument(document.reference)
+            }
+            try await batch.commit()
+        }
+
+        let circles = try await db.collection("circles")
+            .whereField("memberIds", arrayContains: uid)
+            .getDocuments()
+
+        if !circles.documents.isEmpty {
+            let batch = db.batch()
+            for document in circles.documents {
+                batch.updateData(
+                    ["memberIds": FieldValue.arrayRemove([uid])],
+                    forDocument: document.reference
+                )
+            }
+            try await batch.commit()
+        }
+    }
+
     func createCircle(
         name: String,
         sportName: String,
@@ -469,9 +556,13 @@ final class FirebaseManager {
                 "circleId": circleId,
                 "userId": userId,
                 "userName": displayName,
+                "displayName": displayName,
                 "rating": 1500,
                 "role": role,
-                "joinedAt": Timestamp()
+                "memberType": MemberType.registered.rawValue,
+                "isActive": true,
+                "joinedAt": Timestamp(),
+                "updatedAt": Timestamp(),
             ]
 
             self?.db.collection("circleMembers").document(docId).setData(data, merge: true) { error in

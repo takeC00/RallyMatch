@@ -7,11 +7,6 @@ struct MainTabView: View {
 
     var body: some View {
         TabView {
-            MembersTabView()
-                .tabItem {
-                    Label("メンバー登録", systemImage: "person.2")
-                }
-
             MatchGenerationTabView()
                 .tabItem {
                     Label("試合生成", systemImage: "sportscourt")
@@ -21,7 +16,13 @@ struct MainTabView: View {
                 .tabItem {
                     Label("確認", systemImage: "chart.bar")
                 }
+
+            CircleTabView()
+                .tabItem {
+                    Label("Circle", systemImage: "person.3.fill")
+                }
         }
+        .tint(.orange)
         .environment(sessionStore)
         .task {
             clearExpiredSessionIfNeeded()

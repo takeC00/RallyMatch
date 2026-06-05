@@ -4,13 +4,13 @@ struct MatchListHelpView: View {
     var body: some View {
         List {
             Section {
-                helpText("試合一覧画面の操作を説明します。試合済の更新や入れ替え・遅刻早退の変更は、都度クラウドへ自動同期されます。")
+                helpText("試合一覧画面の操作を説明します。試合済の更新や入れ替え・遅刻・早退・休憩の変更は、都度クラウドへ自動同期されます。")
             }
 
             Section("画面上部のアイコン（左から）") {
                 helpLabel("QRコード … 参加者用 QR を表示", systemImage: "qrcode")
                 helpLabel("新規 … いまの試合を破棄して作り直す", systemImage: "doc.badge.plus")
-                helpLabel("遅刻 / 早退 … 参加・退場の ON / OFF", systemImage: "person.badge.clock")
+                helpLabel("遅刻・早退・休憩 … 参加・休憩・退場の ON / OFF", systemImage: "person.badge.clock")
                 helpLabel("操作の説明 … このページを開く（オレンジ）", systemImage: "questionmark.circle")
             }
 
@@ -22,11 +22,11 @@ struct MatchListHelpView: View {
                 helpText("QR アイコンから、そのサークル専用の参加者用 QR を表示します。サークルごとに URL が異なります。同一サークルで試合を再生成しても URL は変わりません。")
             }
 
-            Section("遅刻 / 早退") {
+            Section("遅刻・早退・休憩") {
                 VStack(alignment: .leading, spacing: 8) {
-                    helpText("時計付きの人物アイコンから開きます。サークル全員を ON / OFF で参加管理します。")
-                    helpLabel("ON … 遅刻参加。以降の未実施試合に組み込まれます", systemImage: "person.badge.plus")
-                    helpLabel("OFF … 早退。試合済・試合中の名前は残り、それ以降の試合からは除外されます", systemImage: "person.badge.minus")
+                    helpText("時計付きの人物アイコンから開きます。アカウントメンバー・手動登録・今日だけ参加の全員を ON / OFF で管理できます。")
+                    helpLabel("ON … 参加（遅刻からの復帰含む）。以降の未実施試合に組み込まれます", systemImage: "person.badge.plus")
+                    helpLabel("OFF … 休憩または早退。試合済・試合中の名前は残り、それ以降の試合からは除外されます", systemImage: "person.badge.minus")
                     helpLabel("試合中の選手は OFF にできません", systemImage: "sportscourt.fill")
                     helpLabel("参加者は常に4名以上必要です", systemImage: "person.3")
                     helpLabel("変更後、試合済・試合中以外の未実施試合が自動で作り直されます", systemImage: "arrow.triangle.2.circlepath")

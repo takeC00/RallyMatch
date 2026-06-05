@@ -11,8 +11,22 @@ struct RosterPlayer: Identifiable, Hashable, Sendable {
     let createdAt: Date
     /// アカウント連携済みメンバー（`circleMembers.userId`）
     let linkedUserId: String?
+    /// 手動登録メンバーの `circleMembers` ドキュメント ID
+    let circleMemberId: String?
+    let memberType: MemberType?
 
-    var isLinkedAccount: Bool { linkedUserId != nil }
+    var isLinkedAccount: Bool {
+        memberType == .registered || (linkedUserId != nil && circleMemberId == nil)
+    }
+
+    var isManualMember: Bool {
+        memberType == .manual || circleMemberId != nil
+    }
+
+    /// 旧 circleRoster の一日 Visitor（後方互換・自動削除対象）
+    var isLegacyDayVisitor: Bool {
+        !isLinkedAccount && !isManualMember
+    }
 
     static func documentId(circleId: String, playerId: UUID) -> String {
         "\(circleId)_\(playerId.uuidString.lowercased())"
@@ -29,7 +43,9 @@ struct RosterPlayer: Identifiable, Hashable, Sendable {
         name: String,
         level: PlayerLevel,
         createdAt: Date,
-        linkedUserId: String? = nil
+        linkedUserId: String? = nil,
+        circleMemberId: String? = nil,
+        memberType: MemberType? = nil
     ) {
         self.id = id
         self.playerId = playerId
@@ -38,17 +54,34 @@ struct RosterPlayer: Identifiable, Hashable, Sendable {
         self.level = level
         self.createdAt = createdAt
         self.linkedUserId = linkedUserId
+        self.circleMemberId = circleMemberId
+        self.memberType = memberType
     }
 
     init(from member: CloudCircleMember) {
-        let playerId = PlayerIdentity.stablePlayerId(userId: member.userId)
-        self.id = Self.linkedDocumentId(circleId: member.circleId, userId: member.userId)
-        self.playerId = playerId
+        switch member.memberType {
+        case .registered:
+            guard let userId = member.userId else {
+                fatalError("registered member requires userId")
+            }
+            let playerId = PlayerIdentity.stablePlayerId(userId: userId)
+            self.id = Self.linkedDocumentId(circleId: member.circleId, userId: userId)
+            self.playerId = playerId
+            self.linkedUserId = userId
+            self.circleMemberId = nil
+            self.memberType = .registered
+        case .manual:
+            let playerId = PlayerIdentity.stablePlayerId(circleMemberDocumentId: member.id)
+            self.id = member.id
+            self.playerId = playerId
+            self.linkedUserId = nil
+            self.circleMemberId = member.id
+            self.memberType = .manual
+        }
         self.circleId = member.circleId
         self.name = member.userName
-        self.level = .experienced
+        self.level = member.level ?? .experienced
         self.createdAt = member.joinedAt
-        self.linkedUserId = member.userId
     }
 
     func toDictionary() -> [String: Any] {
@@ -61,6 +94,12 @@ struct RosterPlayer: Identifiable, Hashable, Sendable {
         ]
         if let linkedUserId {
             data["userId"] = linkedUserId
+        }
+        if let circleMemberId {
+            data["circleMemberId"] = circleMemberId
+        }
+        if let memberType {
+            data["memberType"] = memberType.rawValue
         }
         return data
     }
@@ -80,6 +119,8 @@ struct RosterPlayer: Identifiable, Hashable, Sendable {
 
         let createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
         let linkedUserId = data["userId"] as? String
+        let circleMemberId = data["circleMemberId"] as? String
+        let memberType = (data["memberType"] as? String).map(MemberType.fromFirestore)
 
         return RosterPlayer(
             id: document.documentID,
@@ -88,7 +129,9 @@ struct RosterPlayer: Identifiable, Hashable, Sendable {
             name: name,
             level: level,
             createdAt: createdAt,
-            linkedUserId: linkedUserId
+            linkedUserId: linkedUserId,
+            circleMemberId: circleMemberId,
+            memberType: memberType
         )
     }
 }

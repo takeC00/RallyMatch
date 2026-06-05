@@ -127,7 +127,7 @@ final class SessionStore {
         }
     }
 
-    /// 遅刻（参加）・早退（不参加）。成功時 `nil`、失敗時はエラーメッセージ。
+    /// 遅刻（参加）・早退・休憩（不参加）。成功時 `nil`、失敗時はエラーメッセージ。
     @discardableResult
     func setPlayerParticipating(_ player: SessionPlayer, active: Bool) -> String? {
         if active {
@@ -136,7 +136,7 @@ final class SessionStore {
             players.append(player)
         } else {
             if isPlayerInProgress(player.id) {
-                return "試合中のため退場できません"
+                return "試合中のため休憩・早退にできません"
             }
             players.removeAll { $0.id == player.id }
             if !departedPlayers.contains(where: { $0.id == player.id }) {

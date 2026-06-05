@@ -1,6 +1,6 @@
 import Foundation
 
-enum PlayerLevel: String, Codable, CaseIterable, Identifiable {
+enum PlayerLevel: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case beginner
     case experienced
 

@@ -22,4 +22,9 @@ enum VisitorExpiry {
         formatter.dateFormat = "yyyy/MM/dd"
         return formatter.string(from: date)
     }
+
+    /// UserDefaults 等の日付キー用（JST）
+    static func todayKeyInJST(now: Date = .now) -> String {
+        registrationDayLabel(for: now)
+    }
 }

@@ -4,6 +4,7 @@ struct MatchGenerationTabView: View {
     @Environment(SessionStore.self) private var sessionStore
     @Bindable private var firebase = FirebaseManager.shared
     @Bindable private var roster = CircleRosterRepository.shared
+    @Bindable private var membersRepo = CircleMembersRepository.shared
     @State private var showNewSessionConfirm = false
     @State private var isEndingSession = false
 
@@ -26,7 +27,7 @@ struct MatchGenerationTabView: View {
                     ContentUnavailableView(
                         "サークルがありません",
                         systemImage: "sportscourt",
-                        description: Text("メンバー登録タブでサークルを作成または参加してください")
+                        description: Text("Circle タブでサークルを作成または参加してください")
                     )
                 } else {
                     List(firebase.joinedCircles) { circle in
@@ -68,11 +69,11 @@ struct MatchGenerationTabView: View {
             }
             .refreshable {
                 await firebase.refreshCircles()
-                await roster.refreshAll(circleIds: firebase.joinedCircles.map(\.id))
+                await syncAllMemberRosters()
             }
             .task {
                 await firebase.refreshCircles()
-                await roster.refreshAll(circleIds: firebase.joinedCircles.map(\.id))
+                await syncAllMemberRosters()
             }
             .onAppear {
                 clearExpiredSessionIfNeeded()
@@ -88,7 +89,18 @@ struct MatchGenerationTabView: View {
     }
 
     private func playerCount(for circle: CloudCircle) -> Int {
-        roster.players(for: circle.id).count
+        let memberCount = membersRepo.members(for: circle.id).count
+        if memberCount > 0 {
+            return memberCount
+        }
+        return roster.players(for: circle.id).filter { !$0.isLegacyDayVisitor }.count
+    }
+
+    private func syncAllMemberRosters() async {
+        let circleIds = firebase.joinedCircles.map(\.id)
+        await membersRepo.refreshAll(circleIds: circleIds)
+        await membersRepo.syncAllJoinedCircles(circleIds)
+        await roster.refreshAll(circleIds: circleIds)
     }
 
     private func endCurrentSessionAndReset() async {

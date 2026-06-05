@@ -5,27 +5,39 @@ struct SessionSetupView: View {
     var sessionStore: SessionStore
 
     @Bindable private var roster = CircleRosterRepository.shared
+    @Bindable private var membersRepo = CircleMembersRepository.shared
     @Bindable private var firebase = FirebaseManager.shared
+    @Bindable private var dayStore = DayParticipantStore.shared
     @State private var selectedIds: Set<UUID> = []
+    @State private var selectedDayIds: Set<UUID> = []
     @Environment(\.dismiss) private var dismiss
-    @State private var showAddPlayer = false
+    @State private var showAddParticipant = false
     @State private var isGenerating = false
     @State private var showGenerationHelp = false
-    @State private var showVisitorHelp = false
+    @State private var showParticipantHelp = false
 
-    private var circlePlayers: [RosterPlayer] {
-        roster.players(for: circle.id)
+    /// サークルメンバー（registered + manual）。旧 Visitor データは除外
+    private var dayParticipants: [SessionPlayer] {
+        _ = dayStore.revision
+        return dayStore.participants(for: circle.id)
     }
 
-    private var selectedPlayers: [SessionPlayer] {
-        circlePlayers
+    private var persistentPlayers: [RosterPlayer] {
+        roster.players(for: circle.id).filter { !$0.isLegacyDayVisitor }
+    }
+
+    private var allSelectedPlayers: [SessionPlayer] {
+        let fromRoster = persistentPlayers
             .filter { selectedIds.contains($0.playerId) }
             .map(SessionPlayer.init(from:))
+        let fromDay = dayParticipants
+            .filter { selectedDayIds.contains($0.id) }
+        return fromRoster + fromDay
     }
 
     private var generationIssues: [GenerationValidation.Issue] {
         GenerationValidation.validate(
-            players: selectedPlayers,
+            players: allSelectedPlayers,
             mode: sessionStore.mode,
             matchPerPlayer: sessionStore.matchPerPlayer,
             courtCount: sessionStore.courtCount
@@ -36,8 +48,12 @@ struct SessionSetupView: View {
         generationIssues.contains { $0.severity == .blocking }
     }
 
+    private var totalSelectedCount: Int {
+        allSelectedPlayers.count
+    }
+
     private var canGenerate: Bool {
-        selectedIds.count >= 4
+        totalSelectedCount >= 4
             && !isGenerating
             && !hasBlockingGenerationIssue
             && firebase.isPlistConfigured
@@ -45,8 +61,8 @@ struct SessionSetupView: View {
     }
 
     private var statusMessage: String {
-        if selectedIds.count < 4 {
-            return "当日参加者を4名以上選択してください（現在 \(selectedIds.count) 名）"
+        if totalSelectedCount < 4 {
+            return "当日参加者を4名以上選択してください（現在 \(totalSelectedCount) 名）"
         }
         if let blocking = generationIssues.first(where: { $0.severity == .blocking }) {
             return blocking.message
@@ -65,10 +81,23 @@ struct SessionSetupView: View {
 
         Form {
             Section {
-                ForEach(circlePlayers) { player in
+                if persistentPlayers.isEmpty && membersRepo.members(for: circle.id).isEmpty {
+                    Text("サークルメンバーがいません。下のボタンから手動登録するか、Hub / Mate で招待コード参加してください。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                ForEach(persistentPlayers) { player in
                     Toggle(isOn: binding(for: player.playerId)) {
                         HStack {
-                            Text(player.name)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(player.name)
+                                if player.isManualMember {
+                                    Text("手動登録")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                             Spacer()
                             Text(player.level.label)
                                 .font(.caption)
@@ -76,9 +105,27 @@ struct SessionSetupView: View {
                         }
                     }
                 }
-                Button("Visitor追加") { showAddPlayer = true }
+
+                ForEach(dayParticipants) { participant in
+                    Toggle(isOn: dayBinding(for: participant.id)) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(participant.name)
+                                Text("今日だけ参加")
+                                    .font(.caption2)
+                                    .foregroundStyle(.blue)
+                            }
+                            Spacer()
+                            Text(participant.level.label)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Button("参加者を追加") { showAddParticipant = true }
             } header: {
-                VisitorSectionHeader(showHelp: $showVisitorHelp, title: "当日参加者")
+                ParticipantSectionHeader(showHelp: $showParticipantHelp, title: "当日参加者")
             }
 
             Section {
@@ -154,18 +201,16 @@ struct SessionSetupView: View {
         .navigationDestination(isPresented: $showGenerationHelp) {
             GenerationSettingsHelpView()
         }
-        .navigationDestination(isPresented: $showVisitorHelp) {
+        .navigationDestination(isPresented: $showParticipantHelp) {
             VisitorHelpView()
         }
-        .sheet(isPresented: $showAddPlayer) {
-            NavigationStack {
-                PlayerFormView(circle: circle, player: nil)
+        .sheet(isPresented: $showAddParticipant) {
+            if let uid = firebase.uid {
+                ParticipantAddSheet(circle: circle, createdBy: uid)
             }
         }
         .task {
-            await CircleMembersRepository.shared.refresh(circleId: circle.id)
-            try? await CircleMembersRepository.shared.syncMembersToRoster(circleId: circle.id)
-            await roster.refresh(circleId: circle.id)
+            await reloadMembers()
         }
         .onAppear {
             sessionStore.circleId = circle.id
@@ -173,15 +218,44 @@ struct SessionSetupView: View {
                 _ = sessionStore.expireIfNeeded()
             }
             syncDefaultSelection()
+            syncDefaultDaySelection()
         }
-        .onChange(of: circlePlayers.map(\.playerId)) { _, _ in
+        .onChange(of: persistentPlayers.map(\.playerId)) { _, _ in
             syncDefaultSelection()
+        }
+        .onChange(of: dayParticipants.map(\.id)) { _, _ in
+            syncDefaultDaySelection()
         }
     }
 
+    private func reloadMembers() async {
+        await membersRepo.refresh(circleId: circle.id)
+        do {
+            try await membersRepo.syncMembersToRoster(circleId: circle.id)
+        } catch {
+            membersRepo.lastError = error.localizedDescription
+        }
+        await roster.refresh(circleId: circle.id)
+    }
+
     private func syncDefaultSelection() {
-        if selectedIds.isEmpty, !circlePlayers.isEmpty {
-            selectedIds = Set(circlePlayers.map(\.playerId))
+        if selectedIds.isEmpty, !persistentPlayers.isEmpty {
+            selectedIds = Set(persistentPlayers.map(\.playerId))
+        }
+    }
+
+    private func syncDefaultDaySelection() {
+        let ids = Set(dayParticipants.map(\.id))
+        guard !ids.isEmpty else {
+            selectedDayIds = []
+            return
+        }
+        if selectedDayIds.isEmpty {
+            selectedDayIds = ids
+        } else {
+            let newIds = ids.subtracting(selectedDayIds)
+            selectedDayIds.formUnion(newIds)
+            selectedDayIds = selectedDayIds.intersection(ids)
         }
     }
 
@@ -190,6 +264,15 @@ struct SessionSetupView: View {
             get: { selectedIds.contains(id) },
             set: { on in
                 if on { selectedIds.insert(id) } else { selectedIds.remove(id) }
+            }
+        )
+    }
+
+    private func dayBinding(for id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { selectedDayIds.contains(id) },
+            set: { on in
+                if on { selectedDayIds.insert(id) } else { selectedDayIds.remove(id) }
             }
         )
     }
@@ -208,9 +291,7 @@ struct SessionSetupView: View {
         }
 
         sessionStore.clearSyncError()
-        sessionStore.players = circlePlayers
-            .filter { selectedIds.contains($0.playerId) }
-            .map(SessionPlayer.init(from:))
+        sessionStore.players = allSelectedPlayers
         sessionStore.circleId = circle.id
         sessionStore.sessionId = AppConfig.stableSessionId(for: circle.id)
         sessionStore.expiresAt = AppConfig.defaultExpiresAt()
@@ -238,6 +319,27 @@ struct SessionSetupView: View {
         } catch {
             sessionStore.reportSyncError(error)
         }
+    }
+}
+
+private struct ParticipantSectionHeader: View {
+    @Binding var showHelp: Bool
+    var title: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 6) {
+            Text(title)
+            Button {
+                showHelp = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.body)
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("参加者の説明")
+        }
+        .textCase(nil)
     }
 }
 

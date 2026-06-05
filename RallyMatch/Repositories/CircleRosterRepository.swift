@@ -108,27 +108,64 @@ final class CircleRosterRepository {
         await refresh(circleId: player.circleId)
     }
 
+    func upsertMember(_ member: CloudCircleMember, level: PlayerLevel) async throws {
+        switch member.memberType {
+        case .registered:
+            guard let userId = member.userId else { return }
+            try await upsertRegisteredMember(member, userId: userId, level: level)
+        case .manual:
+            try await upsertManualMember(member, level: level)
+        }
+    }
+
+    /// 後方互換
     func upsertLinkedMember(_ member: CloudCircleMember, level: PlayerLevel) async throws {
-        let playerId = PlayerIdentity.stablePlayerId(userId: member.userId)
+        try await upsertMember(member, level: level)
+    }
+
+    private func upsertRegisteredMember(
+        _ member: CloudCircleMember,
+        userId: String,
+        level: PlayerLevel
+    ) async throws {
+        let playerId = PlayerIdentity.stablePlayerId(userId: userId)
         let documentId = RosterPlayer.linkedDocumentId(
             circleId: member.circleId,
-            userId: member.userId
+            userId: userId
         )
         let ref = db.collection("circleRoster").document(documentId)
-        let existing = try await ref.getDocument()
         let now = Timestamp(date: .now)
 
-        var data: [String: Any] = [
+        let data: [String: Any] = [
             "circleId": member.circleId,
             "playerId": playerId.uuidString.lowercased(),
             "name": member.userName,
             "level": level.rawValue,
-            "userId": member.userId,
+            "userId": userId,
+            "memberType": MemberType.registered.rawValue,
+            "createdAt": Timestamp(date: member.joinedAt),
             "updatedAt": now,
         ]
-        if !existing.exists {
-            data["createdAt"] = Timestamp(date: member.joinedAt)
-        }
+
+        try await ref.setData(data, merge: true)
+        await refresh(circleId: member.circleId)
+    }
+
+    private func upsertManualMember(_ member: CloudCircleMember, level: PlayerLevel) async throws {
+        let playerId = PlayerIdentity.stablePlayerId(circleMemberDocumentId: member.id)
+        let ref = db.collection("circleRoster").document(member.id)
+        let now = Timestamp(date: .now)
+
+        let data: [String: Any] = [
+            "circleId": member.circleId,
+            "playerId": playerId.uuidString.lowercased(),
+            "name": member.userName,
+            "level": level.rawValue,
+            "circleMemberId": member.id,
+            "memberType": MemberType.manual.rawValue,
+            "createdAt": Timestamp(date: member.joinedAt),
+            "updatedAt": now,
+        ]
 
         try await ref.setData(data, merge: true)
         await refresh(circleId: member.circleId)
@@ -138,8 +175,22 @@ final class CircleRosterRepository {
         players(for: circleId).first { $0.linkedUserId == userId }
     }
 
+    func manualPlayer(circleId: String, circleMemberId: String) -> RosterPlayer? {
+        players(for: circleId).first { $0.circleMemberId == circleMemberId || $0.id == circleMemberId }
+    }
+
+    func rosterPlayer(for member: CloudCircleMember) -> RosterPlayer? {
+        switch member.memberType {
+        case .registered:
+            guard let userId = member.userId else { return nil }
+            return linkedPlayer(circleId: member.circleId, userId: userId)
+        case .manual:
+            return manualPlayer(circleId: member.circleId, circleMemberId: member.id)
+        }
+    }
+
     func deleteVisitor(_ player: RosterPlayer) async throws {
-        guard !player.isLinkedAccount else {
+        guard player.isLegacyDayVisitor else {
             throw RosterError.cannotDeleteLinkedMember
         }
         try await deletePlayer(player)
@@ -161,7 +212,7 @@ final class CircleRosterRepository {
             .getDocuments()
 
         let expired = snapshot.documents.compactMap { RosterPlayer.from($0) }
-            .filter { !$0.isLinkedAccount && VisitorExpiry.isExpired(createdAt: $0.createdAt) }
+            .filter { $0.isLegacyDayVisitor && VisitorExpiry.isExpired(createdAt: $0.createdAt) }
 
         guard !expired.isEmpty else { return 0 }
 

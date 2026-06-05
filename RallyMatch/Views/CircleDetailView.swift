@@ -6,187 +6,210 @@ struct CircleDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable private var roster = CircleRosterRepository.shared
     @Bindable private var membersRepo = CircleMembersRepository.shared
+    @Bindable private var firebase = FirebaseManager.shared
+    @Bindable private var dayStore = DayParticipantStore.shared
 
-    @State private var showVisitorHelp = false
-    @State private var visitorPendingDelete: RosterPlayer?
-    @State private var showDeleteVisitorConfirm = false
+    @State private var showParticipantHelp = false
+    @State private var showAddParticipant = false
+    @State private var legacyPendingDelete: RosterPlayer?
+    @State private var showDeleteLegacyConfirm = false
+    @State private var pendingMemberDelete: CloudCircleMember?
+    @State private var showDeleteMemberConfirm = false
+    @State private var isDeletingMember = false
 
-    private var accountMembers: [CloudCircleMember] {
-        membersRepo.members(for: circle.id)
+    private var registeredMembers: [CloudCircleMember] {
+        membersRepo.registeredMembers(for: circle.id)
     }
 
-    private var linkedAccountPlayers: [RosterPlayer] {
-        roster.players(for: circle.id).filter(\.isLinkedAccount)
+    private var manualMembers: [CloudCircleMember] {
+        membersRepo.manualMembers(for: circle.id)
     }
 
-    private var guestPlayers: [RosterPlayer] {
-        roster.players(for: circle.id).filter { !$0.isLinkedAccount }
+    private var todayDayParticipants: [SessionPlayer] {
+        _ = dayStore.revision
+        return dayStore.participants(for: circle.id)
     }
 
-    private struct AccountMemberRow: Identifiable {
+    private var legacyDayVisitors: [RosterPlayer] {
+        roster.players(for: circle.id).filter(\.isLegacyDayVisitor)
+    }
+
+    private struct MemberRow: Identifiable {
         let member: CloudCircleMember
         let player: RosterPlayer?
 
         var id: String { member.id }
     }
 
-    private var accountMemberRows: [AccountMemberRow] {
-        accountMembers.map { member in
-            AccountMemberRow(
-                member: member,
-                player: roster.linkedPlayer(circleId: circle.id, userId: member.userId)
-            )
+    private func memberRows(_ members: [CloudCircleMember]) -> [MemberRow] {
+        members.map { member in
+            MemberRow(member: member, player: roster.rosterPlayer(for: member))
         }
     }
 
     private var isLoading: Bool {
         (roster.isLoadingCircleIds.contains(circle.id)
             || membersRepo.isLoadingCircleIds.contains(circle.id))
-        && accountMembers.isEmpty
-        && guestPlayers.isEmpty
+        && registeredMembers.isEmpty
+        && manualMembers.isEmpty
+        && legacyDayVisitors.isEmpty
+        && todayDayParticipants.isEmpty
     }
 
     var body: some View {
         Group {
             if isLoading {
                 ProgressView("読み込み中...")
-            } else if accountMembers.isEmpty && guestPlayers.isEmpty {
+            } else if registeredMembers.isEmpty && manualMembers.isEmpty && legacyDayVisitors.isEmpty && todayDayParticipants.isEmpty {
                 ContentUnavailableView(
                     "参加者がいません",
                     systemImage: "person.crop.circle.badge.plus",
-                    description: Text("招待コードで参加するか、Visitor を追加してください")
+                    description: Text("招待コードで参加するか、手動登録メンバーを追加してください")
                 )
             } else {
                 List {
-                    if !accountMemberRows.isEmpty {
+                    if !registeredMembers.isEmpty {
+                        memberSection(
+                            title: "サークルメンバー",
+                            footer: "タップして経験者・初心者を編集できます。Hub / Mate で参加すると自動的に表示されます。",
+                            rows: memberRows(registeredMembers),
+                            roleLabel: roleLabel
+                        )
+                    }
+
+                    if !manualMembers.isEmpty {
+                        memberSection(
+                            title: "サークルメンバー（手動追加）",
+                            footer: "アプリ未登録の常連メンバーです。レーティング・試合履歴の永続管理対象です。",
+                            rows: memberRows(manualMembers),
+                            roleLabel: { _ in "手動追加" }
+                        )
+                    }
+
+                    if !todayDayParticipants.isEmpty {
                         Section {
-                            ForEach(accountMemberRows) { row in
+                            ForEach(todayDayParticipants) { participant in
                                 NavigationLink {
-                                    MemberLevelEditView(
-                                        circle: circle,
-                                        member: row.member,
-                                        existingPlayer: row.player
+                                    DayParticipantFormView(
+                                        circleId: circle.id,
+                                        participant: participant
                                     )
                                 } label: {
                                     HStack {
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text(row.member.userName)
+                                            Text(participant.name)
                                                 .font(.headline)
-                                                .foregroundStyle(levelColor(row.player?.level ?? .experienced))
-                                            Text(roleLabel(row.member.role))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                                .foregroundStyle(.white)
+                                            Text("今日だけ参加")
+                                                .font(.caption2)
+                                                .foregroundStyle(.blue)
                                         }
                                         Spacer()
-                                        Text((row.player?.level ?? .experienced).label)
-                                            .font(.caption)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(levelBadgeColor(row.player?.level ?? .experienced).opacity(0.15))
-                                            .foregroundStyle(levelColor(row.player?.level ?? .experienced))
-                                            .clipShape(Capsule())
-                                        Text("\(row.member.rating)")
-                                            .font(.subheadline.monospacedDigit())
-                                            .foregroundStyle(.secondary)
+                                        levelBadge(participant.level)
+                                    }
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        dayStore.remove(id: participant.id, circleId: circle.id)
+                                    } label: {
+                                        Label("削除", systemImage: "trash")
                                     }
                                 }
                             }
                         } header: {
-                            Text("アカウントメンバー")
+                            Text("今日だけ参加")
                         } footer: {
-                            Text("タップして経験者・初心者を編集できます。試合生成の組み合わせに反映されます。")
+                            Text("試合設定画面でも選択できます。日本時間で日付が変わると消えます。")
                         }
                     }
 
-                    Section {
-                        ForEach(guestPlayers) { player in
-                            NavigationLink {
-                                PlayerFormView(circle: circle, player: player)
-                            } label: {
+                    if !legacyDayVisitors.isEmpty {
+                        Section {
+                            ForEach(legacyDayVisitors) { player in
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
                                         Text(player.name)
-                                            .foregroundStyle(levelColor(player.level))
+                                            .font(.headline)
+                                            .foregroundStyle(.white)
                                         Spacer()
-                                        Text(player.level.label)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                        levelBadge(player.level)
                                     }
-                                    Text("登録: \(VisitorExpiry.registrationDayLabel(for: player.createdAt))")
+                                    Text("旧データ（次回起動時に自動削除）")
                                         .font(.caption2)
                                         .foregroundStyle(.tertiary)
                                 }
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    visitorPendingDelete = player
-                                    showDeleteVisitorConfirm = true
-                                } label: {
-                                    Label("削除", systemImage: "trash")
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        legacyPendingDelete = player
+                                        showDeleteLegacyConfirm = true
+                                    } label: {
+                                        Label("削除", systemImage: "trash")
+                                    }
                                 }
                             }
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    visitorPendingDelete = player
-                                    showDeleteVisitorConfirm = true
-                                } label: {
-                                    Label("削除", systemImage: "trash")
-                                }
-                            }
+                        } header: {
+                            Text("今日だけ参加（旧データ）")
                         }
-                    } header: {
-                        VisitorSectionHeader(showHelp: $showVisitorHelp, title: "Visitor")
-                    } footer: {
-                        Text("アカウント未登録の参加者です。日本時間で日付が変わると、次回 Match を開いたときに自動で削除されます。左スワイプまたは長押しで手動削除もできます。")
                     }
 
-                    Section("サークル情報") {
-                        LabeledContent("競技", value: circle.sportName)
-                        if !circle.location.isEmpty {
-                            LabeledContent("活動場所", value: circle.location)
-                        }
-                        LabeledContent("招待コード", value: circle.circleCode)
-                        LabeledContent("メンバー数", value: "\(circle.memberCount) 人")
-                    }
                 }
             }
         }
         .navigationTitle(circle.name)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    PlayerFormView(circle: circle, player: nil)
+                Button {
+                    showAddParticipant = true
                 } label: {
                     Image(systemName: "person.badge.plus")
                 }
-                .accessibilityLabel("Visitor追加")
-            }
-
-            ToolbarItem(placement: .topBarLeading) {
-                NavigationLink {
-                    CircleSettingsView(circle: circle, onDeleted: { dismiss() })
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .accessibilityLabel("サークル設定")
+                .accessibilityLabel("参加者を追加")
             }
         }
-        .navigationDestination(isPresented: $showVisitorHelp) {
+        .sheet(isPresented: $showAddParticipant) {
+            if let uid = firebase.uid {
+                ParticipantAddSheet(circle: circle, createdBy: uid)
+            }
+        }
+        .onChange(of: showAddParticipant) { _, isShowing in
+            if !isShowing {
+                Task { await reload() }
+            }
+        }
+        .navigationDestination(isPresented: $showParticipantHelp) {
             VisitorHelpView()
         }
         .confirmationDialog(
-            "Visitorを削除しますか？",
-            isPresented: $showDeleteVisitorConfirm,
-            presenting: visitorPendingDelete
+            "削除しますか？",
+            isPresented: $showDeleteLegacyConfirm,
+            presenting: legacyPendingDelete
         ) { player in
             Button("削除", role: .destructive) {
-                Task { await deleteVisitor(player) }
+                Task { await deleteLegacyVisitor(player) }
             }
             Button("キャンセル", role: .cancel) {
-                visitorPendingDelete = nil
+                legacyPendingDelete = nil
             }
         } message: { player in
-            Text("「\(player.name)」を削除します。この操作は取り消せません。")
+            Text("「\(player.name)」を削除します。")
+        }
+        .confirmationDialog(
+            "メンバーを削除しますか？",
+            isPresented: $showDeleteMemberConfirm,
+            presenting: pendingMemberDelete
+        ) { member in
+            Button("削除", role: .destructive) {
+                Task { await deleteMember(member) }
+            }
+            Button("キャンセル", role: .cancel) {
+                pendingMemberDelete = nil
+            }
+        } message: { member in
+            if member.isManual {
+                Text("「\(member.userName)」を削除します。過去の試合履歴は残ります。")
+            } else {
+                Text("「\(member.userName)」をサークルから除外します。")
+            }
         }
         .refreshable {
             await reload()
@@ -196,9 +219,76 @@ struct CircleDetailView: View {
         }
     }
 
+    @ViewBuilder
+    private func memberSection(
+        title: String,
+        footer: String,
+        rows: [MemberRow],
+        roleLabel: @escaping (String) -> String
+    ) -> some View {
+        Section {
+            ForEach(rows) { row in
+                NavigationLink {
+                    if row.member.isManual {
+                        ManualMemberFormView(
+                            circle: circle,
+                            member: row.member,
+                            createdBy: firebase.uid ?? ""
+                        )
+                    } else {
+                        RegisteredMemberFormView(
+                            circle: circle,
+                            member: row.member,
+                            existingPlayer: row.player
+                        )
+                    }
+                } label: {
+                    memberRowLabel(row: row, role: roleLabel(row.member.role))
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    if canRemoveMember(row.member) {
+                        Button(role: .destructive) {
+                            pendingMemberDelete = row.member
+                            showDeleteMemberConfirm = true
+                        } label: {
+                            Label("削除", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text(title)
+        } footer: {
+            Text(footer)
+        }
+    }
+
+    private func memberRowLabel(row: MemberRow, role: String) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(row.member.userName)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text(role)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            let level = row.player?.level ?? row.member.level ?? .experienced
+            levelBadge(level)
+            Text("\(row.member.rating)")
+                .font(.subheadline.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private func reload() async {
         await membersRepo.refresh(circleId: circle.id)
-        try? await membersRepo.syncMembersToRoster(circleId: circle.id)
+        do {
+            try await membersRepo.syncMembersToRoster(circleId: circle.id)
+        } catch {
+            membersRepo.lastError = error.localizedDescription
+        }
         await roster.refresh(circleId: circle.id)
     }
 
@@ -209,6 +299,16 @@ struct CircleDetailView: View {
         }
     }
 
+    private func levelBadge(_ level: PlayerLevel) -> some View {
+        Text(level.label)
+            .font(.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(levelBadgeColor(level).opacity(0.15))
+            .foregroundStyle(levelColor(level))
+            .clipShape(Capsule())
+    }
+
     private func levelColor(_ level: PlayerLevel) -> Color {
         level == .experienced ? .red : .blue
     }
@@ -217,12 +317,45 @@ struct CircleDetailView: View {
         level == .experienced ? .red : .blue
     }
 
-    private func deleteVisitor(_ player: RosterPlayer) async {
+    private func deleteLegacyVisitor(_ player: RosterPlayer) async {
         do {
             try await roster.deleteVisitor(player)
-            visitorPendingDelete = nil
+            legacyPendingDelete = nil
         } catch {
             roster.lastError = error.localizedDescription
+        }
+    }
+
+    private var currentUserMembership: CloudCircleMember? {
+        guard let uid = firebase.uid else { return nil }
+        return membersRepo.members(for: circle.id).first { $0.userId == uid }
+    }
+
+    private var isOwnerOrAdmin: Bool {
+        firebase.isCircleOwner(circle)
+            || ["admin", "owner"].contains(currentUserMembership?.role ?? "")
+    }
+
+    private func canRemoveMember(_ member: CloudCircleMember) -> Bool {
+        guard !isDeletingMember else { return false }
+        if member.role == "owner" || member.userId == circle.ownerId { return false }
+        if member.userId == firebase.uid { return false }
+        if member.isManual { return isOwnerOrAdmin }
+        if member.isRegistered { return firebase.isCircleOwner(circle) }
+        return false
+    }
+
+    private func deleteMember(_ member: CloudCircleMember) async {
+        isDeletingMember = true
+        defer {
+            isDeletingMember = false
+            pendingMemberDelete = nil
+        }
+
+        do {
+            try await membersRepo.removeMember(member)
+        } catch {
+            membersRepo.lastError = error.localizedDescription
         }
     }
 }

@@ -81,7 +81,7 @@ struct MatchListView: View {
                 } label: {
                     Image(systemName: "person.badge.clock")
                 }
-                .accessibilityLabel("遅刻 / 早退")
+                .accessibilityLabel("遅刻・早退・休憩")
 
                 Button {
                     showMatchListHelp = true
@@ -597,8 +597,7 @@ struct PlayerNextMatchWaitView: View {
 
     private func waitColor(for row: PlayerNextMatchWait) -> Color {
         if row.isPlayingNow { return .orange }
-        guard let wait = row.waitUntilNext else { return .secondary }
-        if wait >= 3 { return .orange }
+        guard row.waitUntilNext != nil else { return .secondary }
         return .primary
     }
 

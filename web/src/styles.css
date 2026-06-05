@@ -224,3 +224,98 @@ body {
 .hidden {
   display: none;
 }
+
+/* ── RallyMate レート QR ページ ── */
+
+body.page-rating {
+  --bg: #fff7ed;
+  --accent: #ea580c;
+  --border: #fed7aa;
+  background: linear-gradient(180deg, var(--bg), #fffbeb 45%);
+}
+
+.rating-meta {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: #78716c;
+}
+
+.rating-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rating-row {
+  display: grid;
+  grid-template-columns: 2rem 1fr 3.5rem 3.5rem 3rem;
+  gap: 0.35rem;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.92rem;
+  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.06);
+}
+
+.rating-row--header {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0 0.85rem 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #78716c;
+}
+
+.rating-rank {
+  font-weight: 700;
+  color: var(--accent);
+  text-align: center;
+}
+
+.rating-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rating-change {
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-change--up {
+  color: #ea580c;
+}
+
+.rating-change--down {
+  color: #2563eb;
+}
+
+.rating-after {
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-before {
+  font-size: 0.78rem;
+  color: #78716c;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 380px) {
+  .rating-row {
+    grid-template-columns: 1.75rem 1fr 3rem 3rem;
+  }
+
+  .rating-row .rating-before,
+  .rating-row--header span:last-child {
+    display: none;
+  }
+}

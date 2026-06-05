@@ -20,6 +20,9 @@ enum CircleDeletionService {
             db.collection("announcements").whereField("circleId", isEqualTo: circleId)
         )
         try await deleteQuery(
+            db.collection("circleDayParticipants").whereField("circleId", isEqualTo: circleId)
+        )
+        try await deleteQuery(
             db.collection("circleRoster").whereField("circleId", isEqualTo: circleId)
         )
         try await deleteQuery(

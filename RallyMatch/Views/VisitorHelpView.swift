@@ -4,58 +4,57 @@ struct VisitorHelpView: View {
     var body: some View {
         List {
             Section {
-                Text("Visitor（ビジター）は、アプリアカウントを持たない参加者を RallyMatch の試合生成に登録するための機能です。")
+                Text("RallyOS では参加者を3種類に分けて管理します。用途に応じて使い分けてください。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
-            Section("アカウントメンバーとの違い") {
+            Section("ユーザー種別") {
                 helpRow(
-                    title: "アカウントメンバー",
-                    detail: "RallyMate / RallyHub / Match で招待コード参加したユーザー。Rating やサークルメンバー一覧に表示されます。",
+                    title: "メンバー（アカウント）",
+                    detail: "Firebase Auth を持つ正式ユーザー。Hub / Mate / Match で招待コード参加。レーティング・ランキング・試合履歴の対象。",
                     systemImage: "person.crop.circle.fill"
                 )
                 helpRow(
-                    title: "Visitor",
-                    detail: "Match だけに登録する名前のみの参加者。試合の組み合わせ生成に使います。RallyMate で試合結果を登録する場合も選択でき、レート計算では 1500 固定（Visitor 自身のレートは変動しません）。",
-                    systemImage: "person.crop.circle.badge.plus"
+                    title: "手動登録メンバー",
+                    detail: "アカウントは持たないが、主催者がサークルに永続登録するユーザー。Android 未対応期間やアプリ未インストールの常連向け。レーティング・試合履歴・ランキングの対象。",
+                    systemImage: "person.crop.circle.badge.checkmark"
+                )
+                helpRow(
+                    title: "今日だけ参加",
+                    detail: "その日だけの一時参加者。サークルメンバー一覧には表示しません。レーティング・ランキング対象外。人数合わせ・試合生成用。",
+                    systemImage: "calendar.badge.clock"
                 )
             }
 
-            Section("Visitor の追加・編集") {
-                Label("メンバー登録 → サークル詳細 → Visitor セクション", systemImage: "person.3")
-                Label("試合設定 → Visitor追加", systemImage: "plus.circle")
-                helpText("名前とレベル（経験者 / 初心者）を設定できます。アカウントメンバーは招待コード参加で自動的に一覧に表示されます。")
+            Section("参加者の追加") {
+                Label("メンバーとして追加 → 手動登録メンバーを作成", systemImage: "person.badge.plus")
+                Label("今日だけ参加 → その日の試合設定にのみ追加", systemImage: "calendar")
+                helpText("アカウントメンバーは招待コード参加で自動的に一覧に表示されます。")
             }
 
-            Section("自動削除（無料プラン対応）") {
-                helpText("Visitor はその日だけの参加者向けです。日本時間（JST）で日付が変わったあと、Match アプリでサークル名簿を開いたタイミングで、前日以前に登録された Visitor が自動的に削除されます。")
-                helpText("サーバー側のスケジュール実行は使わないため、Firebase の無料プラン（Spark）のまま利用できます。削除は Match を開いたときに行われる点にご注意ください。")
+            Section("手動登録メンバー") {
+                helpText("表示名・初期レート（デフォルト1500）・レベル区分（経験者/初心者）・備考を設定できます。")
+                helpText("Match の試合生成、Mate のレーティング管理、Hub のサークルメンバー一覧に表示されます。")
+                helpText("将来、本人がアカウント作成した際に正式メンバーへ昇格・データ引き継ぎできる設計です（昇格処理は今後対応）。")
             }
 
-            Section("手動削除") {
-                Label("サークル詳細 → Visitor を左スワイプ", systemImage: "trash")
-                Label("Visitor 編集画面の「Visitorを削除」", systemImage: "minus.circle")
-                helpText("アカウントメンバーは削除できません。Visitor のみ対象です。")
+            Section("今日だけ参加") {
+                helpText("Match: 試合設定画面から追加。セッション内のみ有効で、サークル名簿には残りません。")
+                helpText("Hub: イベント詳細から追加。イベント単位で管理します（eventVisitors）。")
+                helpText("Mate: レーティング管理対象外です。試合結果の永続登録には含めません。")
             }
 
-            Section("RallyMate との連携") {
-                helpText("RallyMate で試合結果を入力するとき、当日の Visitor もメンバーと同様に選択できます。")
-                helpText("レート計算では Visitor は常に 1500 として扱われ、Visitor 本人のレートは増減しません。アカウントメンバーのみレートが変動します。")
-                helpText("Visitor は翌日以降に Match 起動時などで名簿から削除されます。削除後も試合履歴では参加者名が「Visitor」と表示されます。")
+            Section("Match 試合生成") {
+                helpText("アカウントメンバーと手動登録メンバーは circleMembers から自動同期されます。Match を開くと試合設定に表示されます。")
+                helpText("当日の「今日だけ参加」は試合生成に使えますが、翌日以降は残りません。")
             }
 
-            Section("試合生成での使い方") {
-                helpText("試合設定画面で当日参加するメンバーと Visitor にチェックを入れ、4名以上選んで試合を生成します。経験者・初心者の設定は生成モード（ミックス / レベル分離）の組み合わせに使われます。")
-            }
-
-            Section("よくある例") {
-                Label("その日だけ参加する友人・ゲスト", systemImage: "figure.wave")
-                Label("まだアプリに登録していないメンバー", systemImage: "person.badge.plus")
-                Label("練習参加者を仮名で登録しておく", systemImage: "pencil")
+            Section("旧 Visitor データ") {
+                helpText("以前 circleRoster に登録されていた一日参加者は、Match 起動時に自動削除されます。常連の方は手動登録メンバーへの移行をおすすめします。")
             }
         }
-        .navigationTitle("Visitor とは")
+        .navigationTitle("参加者の種類")
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -94,7 +93,7 @@ struct VisitorSectionHeader: View {
                     .foregroundStyle(.orange)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Visitor の説明")
+            .accessibilityLabel("参加者の説明")
         }
         .textCase(nil)
     }

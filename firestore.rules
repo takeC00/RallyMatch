@@ -125,23 +125,39 @@ service cloud.firestore {
     match /circleMembers/{memberId} {
       allow read: if isSignedIn()
         && (resource == null
+          || !('userId' in resource.data)
           || resource.data.userId == request.auth.uid
           || isCircleMember(resource.data.circleId));
       allow create: if isSignedIn()
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.role in ['member', 'owner', 'admin'];
+        && (
+          (request.resource.data.memberType == 'registered'
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.role in ['member', 'owner', 'admin'])
+          || (request.resource.data.memberType == 'manual'
+            && isCircleMember(request.resource.data.circleId)
+            && !('userId' in request.resource.data))
+        );
       allow update: if isSignedIn()
         && (
           (resource.data.circleId != null
             && get(/databases/$(database)/documents/circles/$(resource.data.circleId)).data.ownerId == request.auth.uid)
           || (isCircleMember(resource.data.circleId)
+            && resource.data.memberType == 'manual')
+          || (isCircleMember(resource.data.circleId)
+            && resource.data.memberType == 'registered'
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['rating', 'level', 'notes', 'updatedAt']))
+          || (isCircleMember(resource.data.circleId)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating']))
           || (resource.data.userId == request.auth.uid
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userName']))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userName', 'displayName']))
         );
       allow delete: if isSignedIn()
         && resource.data.circleId != null
-        && get(/databases/$(database)/documents/circles/$(resource.data.circleId)).data.ownerId == request.auth.uid;
+        && (
+          get(/databases/$(database)/documents/circles/$(resource.data.circleId)).data.ownerId == request.auth.uid
+          || (isOwnerOrAdmin(resource.data.circleId) && resource.data.memberType == 'manual')
+        );
     }
 
     match /events/{eventId} {
@@ -192,11 +208,26 @@ service cloud.firestore {
         && isOwnerOrAdmin(resource.data.circleId);
     }
 
+    // ── RallyMatch 今日だけ参加（Mate 連携） ─────────
+
+    match /circleDayParticipants/{participantId} {
+      allow read: if isSignedIn()
+        && (resource == null || isCircleMember(resource.data.circleId));
+      allow create, update: if isSignedIn()
+        && isCircleMember(request.resource.data.circleId)
+        && request.resource.data.circleId is string
+        && request.resource.data.participantId is string
+        && request.resource.data.name is string
+        && request.resource.data.dateKey is string;
+      allow delete: if isSignedIn()
+        && isCircleMember(resource.data.circleId);
+    }
+
     // ── RallyMatch サークル参加者名簿 ─────────────────
 
     match /circleRoster/{rosterId} {
       allow read: if isSignedIn()
-        && isCircleMember(resource.data.circleId);
+        && (resource == null || isCircleMember(resource.data.circleId));
       allow create: if isSignedIn()
         && isCircleMember(request.resource.data.circleId)
         && request.resource.data.circleId is string
@@ -207,6 +238,16 @@ service cloud.firestore {
           || request.resource.data.userId is string);
       allow update, delete: if isSignedIn()
         && isCircleMember(resource.data.circleId);
+    }
+
+    // ── RallyMate 本日レート QR スナップショット ─────
+
+    match /ratingSnapshots/{snapshotId} {
+      allow read: if true;
+      allow create, update: if isSignedIn()
+        && isCircleMember(request.resource.data.circleId);
+      allow delete: if isSignedIn()
+        && isCircleOwner(resource.data.circleId);
     }
 
     // ── RallyMate ──────────────────────────────────────
