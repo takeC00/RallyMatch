@@ -49,6 +49,7 @@ struct GenerationSettingsHelpView: View {
         }
         .navigationTitle("生成条件の説明")
         .navigationBarTitleDisplayMode(.inline)
+        .rallyDarkFormScreen()
     }
 }
 

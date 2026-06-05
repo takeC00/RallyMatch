@@ -56,6 +56,7 @@ struct VisitorHelpView: View {
         }
         .navigationTitle("参加者の種類")
         .navigationBarTitleDisplayMode(.inline)
+        .rallyDarkFormScreen()
     }
 
     private func helpText(_ string: String) -> some View {

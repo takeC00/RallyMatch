@@ -55,6 +55,7 @@ struct MatchListHelpView: View {
         }
         .navigationTitle("試合一覧の説明")
         .navigationBarTitleDisplayMode(.inline)
+        .rallyDarkFormScreen()
     }
 
     private static let wideRowInsets = EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
@@ -209,7 +210,7 @@ private struct HelpProgressRowList: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(RallyScreenStyle.rowBackground)
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }

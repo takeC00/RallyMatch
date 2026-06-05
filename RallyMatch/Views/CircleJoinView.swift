@@ -47,6 +47,7 @@ struct CircleJoinView: View {
         }
         .navigationTitle("サークル参加")
         .navigationBarTitleDisplayMode(.inline)
+        .rallyDarkFormScreen()
     }
 
     private func join() {

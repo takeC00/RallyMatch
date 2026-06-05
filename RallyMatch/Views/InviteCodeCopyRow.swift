@@ -15,7 +15,7 @@ struct InviteCodeCopyRow: View {
             HStack {
                 Text(code)
                     .font(.title3.monospaced().bold())
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.white)
                 Spacer()
                 Label {
                     Text(copied ? "コピー済み" : "タップでコピー")
