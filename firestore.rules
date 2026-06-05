@@ -49,7 +49,7 @@ service cloud.firestore {
     }
 
     // 招待コード参加: まだ memberIds に含まれない本人だけが自分を追加できる
-    function isSelfJoiningCircle(circleId) {
+    function isSelfJoiningCircle() {
       return isSignedIn()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
         && request.auth.uid in request.resource.data.memberIds
@@ -96,7 +96,7 @@ service cloud.firestore {
         && request.resource.data.memberIds.size() == 1
         && request.resource.data.memberIds[0] == request.auth.uid;
       allow update: if isOwnerOrAdmin(circleId)
-        || isSelfJoiningCircle(circleId)
+        || isSelfJoiningCircle()
         || (isCircleMember(circleId)
           && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['memberIds', 'updatedAt']));
@@ -118,6 +118,8 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/circles/$(resource.data.circleId)).data.ownerId == request.auth.uid)
           || (isCircleMember(resource.data.circleId)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating']))
+          || (resource.data.userId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userName']))
         );
       allow delete: if isSignedIn()
         && resource.data.circleId != null
