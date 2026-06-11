@@ -17,12 +17,8 @@ struct CircleDetailView: View {
     @State private var showDeleteMemberConfirm = false
     @State private var isDeletingMember = false
 
-    private var registeredMembers: [CloudCircleMember] {
-        membersRepo.registeredMembers(for: circle.id)
-    }
-
-    private var manualMembers: [CloudCircleMember] {
-        membersRepo.manualMembers(for: circle.id)
+    private var circleMembers: [CloudCircleMember] {
+        membersRepo.members(for: circle.id)
     }
 
     private var todayDayParticipants: [SessionPlayer] {
@@ -50,8 +46,7 @@ struct CircleDetailView: View {
     private var isLoading: Bool {
         (roster.isLoadingCircleIds.contains(circle.id)
             || membersRepo.isLoadingCircleIds.contains(circle.id))
-        && registeredMembers.isEmpty
-        && manualMembers.isEmpty
+        && circleMembers.isEmpty
         && legacyDayVisitors.isEmpty
         && todayDayParticipants.isEmpty
     }
@@ -60,7 +55,7 @@ struct CircleDetailView: View {
         Group {
             if isLoading {
                 ProgressView("読み込み中...")
-            } else if registeredMembers.isEmpty && manualMembers.isEmpty && legacyDayVisitors.isEmpty && todayDayParticipants.isEmpty {
+            } else if circleMembers.isEmpty && legacyDayVisitors.isEmpty && todayDayParticipants.isEmpty {
                 ContentUnavailableView(
                     "参加者がいません",
                     systemImage: "person.crop.circle.badge.plus",
@@ -68,21 +63,11 @@ struct CircleDetailView: View {
                 )
             } else {
                 List {
-                    if !registeredMembers.isEmpty {
+                    if !circleMembers.isEmpty {
                         memberSection(
                             title: "サークルメンバー",
-                            footer: "タップして経験者・初心者を編集できます。Hub / Mate で参加すると自動的に表示されます。",
-                            rows: memberRows(registeredMembers),
-                            roleLabel: roleLabel
-                        )
-                    }
-
-                    if !manualMembers.isEmpty {
-                        memberSection(
-                            title: "サークルメンバー（手動追加）",
-                            footer: "アプリ未登録の常連メンバーです。レーティング・試合履歴の永続管理対象です。",
-                            rows: memberRows(manualMembers),
-                            roleLabel: { _ in "手動追加" }
+                            footer: "招待コード参加・手動登録のメンバーをまとめて表示します。アカウント登録済みのメンバーには認証マークが付きます。",
+                            rows: memberRows(circleMembers)
                         )
                     }
 
@@ -225,8 +210,7 @@ struct CircleDetailView: View {
     private func memberSection(
         title: String,
         footer: String,
-        rows: [MemberRow],
-        roleLabel: @escaping (String) -> String
+        rows: [MemberRow]
     ) -> some View {
         Section {
             ForEach(rows) { row in
@@ -245,7 +229,7 @@ struct CircleDetailView: View {
                         )
                     }
                 } label: {
-                    memberRowLabel(row: row, role: roleLabel(row.member.role))
+                    memberRowLabel(row: row)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     if canRemoveMember(row.member) {
@@ -265,13 +249,21 @@ struct CircleDetailView: View {
         }
     }
 
-    private func memberRowLabel(row: MemberRow, role: String) -> some View {
+    private func memberRowLabel(row: MemberRow) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(row.member.userName)
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                Text(role)
+                HStack(spacing: 6) {
+                    Text(row.member.userName)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    if row.member.isRegistered {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel("アカウント登録済み")
+                    }
+                }
+                Text(roleLabel(row.member.role))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
